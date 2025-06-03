@@ -29,7 +29,7 @@ enum Commands {
     Remove(Rulenames),
     #[command(
         name = "edit",
-        about = "edit a rule",
+        about = "Edit a rule",
         allow_missing_positional = true,
         disable_help_flag = false,
     )]
@@ -45,7 +45,7 @@ enum Commands {
     Start(Rulenames),
     #[command(name = "stop", about = "Stop one or all portforward", disable_help_flag = false)]
     Stop(Rulenames),
-    #[command(name = "check", about = "check rules status", disable_help_flag = false)]
+    #[command(name = "check", about = "Check rules status", disable_help_flag = false)]
     Check(Rulenames),
 
 }
