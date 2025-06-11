@@ -37,5 +37,21 @@ pub fn save_rules(rules: &HashMap<String, PortForwardRule>) -> Result<()> {
 }
 
 
+pub fn load_ssh_config() -> Result<Vec<String>> {
+    let path = shellexpand::tilde("~/.ssh/config").into_owned();
+    if !Path::new(&path).exists() {
+        return Ok(vec![]);
+    }
+    let data = fs::read_to_string(&path)?;
+    let mut hosts = vec![];
+    for line in data.lines() {
+        if line.starts_with("Host ") {
+            let host = line.trim_start_matches("Host ").to_string();
+            hosts.push(host);
+        }
+    }
+    Ok(hosts)
+}
+
 
 

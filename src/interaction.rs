@@ -1,10 +1,15 @@
-use crate::cmd::common::{load_rules, PortForwardRule};
+use crate::cmd::common::{load_rules, load_ssh_config, PortForwardRule};
 
 use dialoguer::Select;
 use dialoguer::{Input, MultiSelect, theme::ColorfulTheme};
 
 pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
+    let hosts = load_ssh_config()?;
+    if hosts.is_empty() {
+        return Err(anyhow::anyhow!("No hosts found in ~/.ssh/config"));
+    }
     let rules = load_rules()?;
+
     let name: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("RuleName:")
         .validate_with(|input: &String| {
@@ -24,10 +29,24 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
         .allow_empty(false)
         .interact_text()?;
 
-    let host: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("RemoteHost:") //Host in ~/.ssh/config
-        .allow_empty(false)
-        .interact_text()?;
+    // let remote_host: String = Input::with_theme(&ColorfulTheme::default())
+    //     .with_prompt("RemoteHost:") //Host in ~/.ssh/config
+    //     .allow_empty(false)
+    //     .interact_text()?;
+
+
+    let section = Select::with_theme(&ColorfulTheme::default())
+    .with_prompt("RemoteHost")
+    .items(&hosts)
+    .default(0)
+    .interact()?;
+    let remote_host = hosts[section].clone();
+
+    // let remote_host: String = Select::with_theme(&ColorfulTheme::default())
+    //     .with_prompt("RemoteHost:")
+    //     .items(&hosts)
+    //     .default(0)
+    //     .interact()?;
 
     let local_port: u16 = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("LocalPort:")
@@ -42,7 +61,7 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
     let rule = PortForwardRule {
         local_port,
         remote_port,
-        remote_host: host,
+        remote_host,
         status: false,
         pid: None,
     };
