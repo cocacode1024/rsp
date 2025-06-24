@@ -42,12 +42,6 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
     .interact()?;
     let remote_host = hosts[section].clone();
 
-    // let remote_host: String = Select::with_theme(&ColorfulTheme::default())
-    //     .with_prompt("RemoteHost:")
-    //     .items(&hosts)
-    //     .default(0)
-    //     .interact()?;
-
     let local_port: u16 = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("LocalPort:")
         .allow_empty(false)
@@ -177,11 +171,8 @@ pub fn select_rules() -> Option<Vec<String>> {
 pub fn get_rules_names() -> anyhow::Result<Vec<String>> {
     let rules = load_rules()?;
     let keys: Vec<String> = rules.keys().cloned().collect();
-    if keys.is_empty() {
-        println!("No rules available.");
+    if keys.is_empty() {println!("No rules available.");
         return Ok(vec![]);
     }
     Ok(keys)
 }
-
-

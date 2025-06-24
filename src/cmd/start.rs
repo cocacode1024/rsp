@@ -33,7 +33,7 @@ async fn start_selected(rules: HashMap<String, PortForwardRule>) -> Result<()>{
     let options = vec!["Yes", "No"];
     let selection = Select::new()
         .with_prompt(format!(
-            "Are you sure you want to start {} rule{}: {}? Running rules will not be affected.",
+            "Are you sure you want to start {} rule{}: {}? Running rules will not be affected",
             if names.len() == 1 { "this" } else { "these" },
             if names.len() == 1 { "" } else { "s" },
             names.join(", ")
