@@ -17,7 +17,11 @@ pub fn list_rules() -> Result<()> {
         "Status",
         "PID"
     ]);
-    for (name, rule) in rules {
+
+    let mut sorted_rule: Vec<(String, _)> = rules.into_iter().collect();
+    sorted_rule.sort_by(|a, b| a.0.cmp(&b.0));
+    
+    for (name, rule) in sorted_rule {
         table.add_row(row![
             name,
             rule.local_port,

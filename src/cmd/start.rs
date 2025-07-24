@@ -30,6 +30,9 @@ async fn start_all(rules: HashMap<String, PortForwardRule>) -> Result<()> {
 
 async fn start_selected(rules: HashMap<String, PortForwardRule>) -> Result<()>{
     let names = select_rules().unwrap_or_default();
+    if names.is_empty() {
+        return Ok(());
+    }
     let options = vec!["Yes", "No"];
     let selection = Select::new()
         .with_prompt(format!(

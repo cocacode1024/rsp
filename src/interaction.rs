@@ -29,12 +29,6 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
         .allow_empty(false)
         .interact_text()?;
 
-    // let remote_host: String = Input::with_theme(&ColorfulTheme::default())
-    //     .with_prompt("RemoteHost:") //Host in ~/.ssh/config
-    //     .allow_empty(false)
-    //     .interact_text()?;
-
-
     let section = Select::with_theme(&ColorfulTheme::default())
     .with_prompt("RemoteHost")
     .items(&hosts)
@@ -110,7 +104,10 @@ pub fn update_rule_form(
 
 pub fn select_rule() -> Option<String> {
     let names = match get_rules_names() {
-        Ok(names) => names,
+        Ok(mut names) => {
+            names.sort();
+            names
+        },
         Err(_) => {
             return None;
         }
@@ -122,7 +119,7 @@ pub fn select_rule() -> Option<String> {
         .default(0)
         .interact_opt()
     {
-        Ok(Some(index)) if index < names.len() - 1 => Some(names[index].clone()),
+        Ok(Some(index)) if index <= names.len() - 1 => Some(names[index].clone()),
         _ => None,
     }
 }
@@ -130,7 +127,10 @@ pub fn select_rule() -> Option<String> {
 pub fn select_rules() -> Option<Vec<String>> {
     loop {
         let names = match get_rules_names() {
-            Ok(names) => names,
+            Ok(mut names) => {
+                names.sort();
+                names
+            },
             Err(_) => {
                 return None;
             }
