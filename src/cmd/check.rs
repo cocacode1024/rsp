@@ -3,49 +3,81 @@ use super::start::start_forward_force;
 use super::stop::stop_forward_force;
 use crate::cmd::common::load_rules;
 use crate::interaction::select_rules;
-use crate::ssh::get_pid;
+use crate::utils::get_pid;
 use anyhow::Result;
 use dialoguer::Select;
 use std::collections::HashMap;
 
-async fn check_running(names: Vec<String>, rules: HashMap<String, PortForwardRule>) -> Result<()> {
+async fn check_running(
+    names: Vec<String>,
+    rules: &mut HashMap<String, PortForwardRule>,
+) -> Result<()> {
     let mut not_started_rules = vec![];
     let mut running_rules = vec![];
     let mut stoped_rules = vec![];
 
-    for name in &names {
-        if let Some(rule) = rules.get(name) {
+    for name in names {
+        if let Some(rule) = rules.get(&name) {
             if rule.status {
                 match get_pid(rule.local_port) {
-                    Ok(_) => running_rules.push(name.to_string()),
-                    Err(_) => stoped_rules.push(name.to_string()),
+                    Ok(_) => running_rules.push(name),
+                    Err(_) => stoped_rules.push(name),
                 }
             } else {
                 if let Err(_) = get_pid(rule.local_port) {
-                    not_started_rules.push(name.to_string());
+                    not_started_rules.push(name);
                 }
             }
         }
     }
+
     if !not_started_rules.is_empty() {
         println!(
             "{} rule{} {} not running: {}, you can start {} by 'rsp start {}'.",
-            if not_started_rules.len() == 1 { "This" } else { "These" },
-            if not_started_rules.len() == 1 { "" } else { "s" },
-            if not_started_rules.len() == 1 { "is" } else { "are" },
+            if not_started_rules.len() == 1 {
+                "This"
+            } else {
+                "These"
+            },
+            if not_started_rules.len() == 1 {
+                ""
+            } else {
+                "s"
+            },
+            if not_started_rules.len() == 1 {
+                "is"
+            } else {
+                "are"
+            },
             not_started_rules.join(", "),
-            if not_started_rules.len() == 1 { "it" } else { "them" },
+            if not_started_rules.len() == 1 {
+                "it"
+            } else {
+                "them"
+            },
             not_started_rules.join(" ")
         );
     }
     if !running_rules.is_empty() {
         println!(
             "{} rule{} {} running: {}, you can stop {} by 'rsp stop {}'.",
-            if running_rules.len() == 1 { "This" } else { "These" },
+            if running_rules.len() == 1 {
+                "This"
+            } else {
+                "These"
+            },
             if running_rules.len() == 1 { "" } else { "s" },
-            if running_rules.len() == 1 { "is" } else { "are" },
+            if running_rules.len() == 1 {
+                "is"
+            } else {
+                "are"
+            },
             running_rules.join(", "),
-            if running_rules.len() == 1 { "it" } else { "them" },
+            if running_rules.len() == 1 {
+                "it"
+            } else {
+                "them"
+            },
             running_rules.join(" ")
         );
     }
@@ -57,35 +89,40 @@ async fn check_running(names: Vec<String>, rules: HashMap<String, PortForwardRul
     let selection = Select::new()
         .with_prompt(format!(
             "{} rule{} {} terminated abnormally: {}. Do you want to restart?",
-            if stoped_rules.len() == 1 { "This" } else { "These" },
+            if stoped_rules.len() == 1 {
+                "This"
+            } else {
+                "These"
+            },
             if stoped_rules.len() == 1 { "" } else { "s" },
-            if stoped_rules.len() == 1 { "has" } else { "have" },
+            if stoped_rules.len() == 1 {
+                "has"
+            } else {
+                "have"
+            },
             stoped_rules.join(", ")
         ))
         .items(&options)
         .default(1)
         .interact()?;
     if selection == 0 {
-        for name in &stoped_rules {
-            if let Some(rule) = rules.get(name) {
-                if rule.status {
-                    start_forward_force(name.to_string(), rules.clone()).await?;
-                }
-            }
-        }
+        start_forward_force(&stoped_rules, rules).await?;
     } else {
-        stop_forward_force(stoped_rules, rules).await?
-    }
+        stop_forward_force(&stoped_rules, rules).await?
+    };
     Ok(())
 }
 
-async fn check_all(rules: HashMap<String, PortForwardRule>) -> Result<()> {
+async fn check_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = rules.keys().cloned().collect::<Vec<String>>();
     check_running(names, rules).await?;
     Ok(())
 }
 
-async fn check_input(names: Vec<String>, rules: HashMap<String, PortForwardRule>) -> Result<()> {
+async fn check_input(
+    names: Vec<String>,
+    rules: &mut HashMap<String, PortForwardRule>,
+) -> Result<()> {
     let mut not_found_rules = vec![];
     let mut found_rules = vec![];
     for name in &names {
@@ -101,7 +138,7 @@ async fn check_input(names: Vec<String>, rules: HashMap<String, PortForwardRule>
     Ok(())
 }
 
-async fn check_selected(rules: HashMap<String, PortForwardRule>) -> Result<()> {
+async fn check_selected(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = select_rules().unwrap_or_default();
     if names.is_empty() {
         println!("There is no rule to check.");
@@ -113,18 +150,18 @@ async fn check_selected(rules: HashMap<String, PortForwardRule>) -> Result<()> {
 }
 
 pub async fn check_rules(names: Vec<String>) -> Result<()> {
-    let rules = load_rules()?;
+    let mut rules = load_rules()?;
     if names.is_empty() {
-        check_selected(rules).await?;
+        check_selected(&mut rules).await?;
         return Ok(());
     };
 
     if names == vec!["all"] {
-        check_all(rules).await?;
+        check_all(&mut rules).await?;
         return Ok(());
     };
 
-    check_input(names, rules).await?;
+    check_input(names, &mut rules).await?;
 
     Ok(())
 }

@@ -6,7 +6,6 @@ pub fn edit_rule(mut name: String) -> Result<()> {
     if name.is_empty() {
         name = select_rule().unwrap_or_default();
         if name.is_empty() {
-            println!("There is no rule to edit.");
             return Ok(());
         }
     };

@@ -1,6 +1,6 @@
-use anyhow::Result;
-use prettytable::{row, Table};
 use crate::cmd::common::load_rules;
+use anyhow::Result;
+use prettytable::{Table, row};
 
 pub fn list_rules() -> Result<()> {
     let rules = load_rules()?;
@@ -20,7 +20,7 @@ pub fn list_rules() -> Result<()> {
 
     let mut sorted_rule: Vec<(String, _)> = rules.into_iter().collect();
     sorted_rule.sort_by(|a, b| a.0.cmp(&b.0));
-    
+
     for (name, rule) in sorted_rule {
         table.add_row(row![
             name,

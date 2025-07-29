@@ -1,6 +1,6 @@
-use anyhow::Result;
 use crate::cmd::common::{load_rules, save_rules};
 use crate::interaction::add_rule_form;
+use anyhow::Result;
 
 pub fn add_rule() -> Result<()> {
     let mut rules = load_rules()?;

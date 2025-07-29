@@ -4,7 +4,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct PortForwardRule {
     pub local_port: u16,
@@ -36,7 +35,6 @@ pub fn save_rules(rules: &HashMap<String, PortForwardRule>) -> Result<()> {
     Ok(())
 }
 
-
 pub fn load_ssh_config() -> Result<Vec<String>> {
     let path = shellexpand::tilde("~/.ssh/config").into_owned();
     if !Path::new(&path).exists() {
@@ -52,6 +50,3 @@ pub fn load_ssh_config() -> Result<Vec<String>> {
     }
     Ok(hosts)
 }
-
-
-

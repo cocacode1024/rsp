@@ -1,15 +1,16 @@
 use super::common::PortForwardRule;
 use crate::cmd::common::{load_rules, save_rules};
 use crate::interaction::select_rules;
-use crate::ssh::get_pid;
+use crate::utils::{check_exist, get_pid};
 use anyhow::{Context, Result};
 use dialoguer::Select;
 use std::collections::HashMap;
 
 use std::process::Command;
 
-pub async fn stop_all(rules: HashMap<String, PortForwardRule>) -> Result<()> {
+pub async fn stop_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let options = vec!["Yes", "No"];
+
     let selection = Select::new()
         .with_prompt("Are you sure you want to stop all rules?")
         .items(&options)
@@ -17,9 +18,8 @@ pub async fn stop_all(rules: HashMap<String, PortForwardRule>) -> Result<()> {
         .interact()?;
 
     if selection == 0 {
-        let names = rules.keys().cloned().collect();
-        stop_forward_force(names, rules).await?;
-
+        let names = rules.keys().cloned().collect::<Vec<String>>();
+        stop_forward_force(&names, rules).await?;
         println!("All rules stopped.");
     } else {
         println!("The operation was cancelled.");
@@ -27,8 +27,11 @@ pub async fn stop_all(rules: HashMap<String, PortForwardRule>) -> Result<()> {
     Ok(())
 }
 
-pub async fn stop_selected(rules: HashMap<String, PortForwardRule>) -> Result<()> {
+pub async fn stop_selected(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = select_rules().unwrap_or_default();
+    if names.is_empty() {
+        return Ok(());
+    }
     let options = vec!["Yes", "No"];
     let selection = Select::new()
         .with_prompt(format!(
@@ -41,11 +44,10 @@ pub async fn stop_selected(rules: HashMap<String, PortForwardRule>) -> Result<()
         .default(1)
         .interact()?;
     if selection == 0 {
-        stop_forward_force(names.clone(), rules).await?;
-
+        stop_forward_force(&names, rules).await?;
         println!(
             "{} rule{} stopped.",
-            if names.len() == 1 { "Rule" } else { "Rules" },
+            if names.len() == 1 { "Rule" } else { "Rules" }.to_string(),
             if names.len() == 1 { "" } else { "s" }
         );
     } else {
@@ -55,33 +57,20 @@ pub async fn stop_selected(rules: HashMap<String, PortForwardRule>) -> Result<()
     Ok(())
 }
 pub async fn stop_input(
-    mut names: Vec<String>,
-    rules: HashMap<String, PortForwardRule>,
+    names: Vec<String>,
+    rules: &mut HashMap<String, PortForwardRule>,
 ) -> Result<()> {
-    names.retain(|name| {
-        if !rules.contains_key(name) {
-            println!("Rule '{}' not found.", name);
-            false
-        } else {
-            true
-        }
-    });
-    stop_forward_force(names.clone(), rules).await?;
-    println!(
-        "{} rule{} stopped.",
-        if names.len() == 1 { "Rule" } else { "Rules" },
-        if names.len() == 1 { "" } else { "s" }
-    );
-
+    let names = check_exist(names)?;
+    stop_forward_force(&names, rules).await?;
     Ok(())
 }
 
 pub async fn stop_forward_force(
-    names: Vec<String>,
-    mut rules: HashMap<String, PortForwardRule>,
+    names: &Vec<String>,
+    rules: &mut HashMap<String, PortForwardRule>,
 ) -> Result<()> {
     for name in names {
-        if let Some(rule) = rules.get_mut(&name) {
+        if let Some(rule) = rules.get_mut(name) {
             let local_port = rule.local_port;
             if let Ok(pid) = get_pid(local_port) {
                 let output = Command::new("kill")
@@ -101,23 +90,24 @@ pub async fn stop_forward_force(
             rule.status = false;
             save_rules(&rules)?;
         }
+        println!("Rule '{}' stopped.", name);
     }
     Ok(())
 }
 
 pub async fn stop_forward(names: Vec<String>) -> Result<()> {
-    let rules = load_rules()?;
+    let mut rules = load_rules()?;
     if names.is_empty() {
-        stop_selected(rules).await?;
+        stop_selected(&mut rules).await?;
         return Ok(());
     };
 
     if names == vec!["all"] {
-        stop_all(rules).await?;
+        stop_all(&mut rules).await?;
         return Ok(());
     };
 
-    stop_input(names, rules).await?;
+    stop_input(names, &mut rules).await?;
 
     Ok(())
 }

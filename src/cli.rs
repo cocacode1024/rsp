@@ -1,4 +1,3 @@
-use clap::{Args, Parser, Subcommand};
 use crate::cmd::add::add_rule;
 use crate::cmd::check::check_rules;
 use crate::cmd::edit::edit_rule;
@@ -6,6 +5,7 @@ use crate::cmd::list::list_rules;
 use crate::cmd::remove::remove_rules;
 use crate::cmd::start::start_forward;
 use crate::cmd::stop::stop_forward;
+use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "rst")]
@@ -31,7 +31,7 @@ enum Commands {
         name = "edit",
         about = "Edit a rule",
         allow_missing_positional = true,
-        disable_help_flag = false,
+        disable_help_flag = false
     )]
     Edit(Rulename),
     #[command(
@@ -41,13 +41,35 @@ enum Commands {
         disable_help_flag = true
     )]
     List,
-    #[command(name = "start", about = "Start one or all portforward", disable_help_flag = false)]
+    #[command(
+        name = "start",
+        about = "Start one or all portforward",
+        disable_help_flag = false
+    )]
     Start(Rulenames),
-    #[command(name = "stop", about = "Stop one or all portforward", disable_help_flag = false)]
+    #[command(
+        name = "stop",
+        about = "Stop one or all portforward",
+        disable_help_flag = false
+    )]
     Stop(Rulenames),
-    #[command(name = "check", about = "Check rules status", disable_help_flag = false)]
+    #[command(
+        name = "check",
+        about = "Check rules status",
+        disable_help_flag = false
+    )]
     Check(Rulenames),
+}
 
+#[derive(Debug, Args)]
+pub struct Rulenames {
+    #[arg(help = "Rule names to operate on. Use 'all' to operate on all rules")]
+    pub names: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct Rulename {
+    pub names: Option<String>,
 }
 
 impl Cli {
@@ -84,13 +106,4 @@ impl Cli {
         Ok(())
     }
 }
-#[derive(Debug, Args)]
-pub struct Rulenames{
-    #[arg(help = "Rule names to operate on. Use 'all' to operate on all rules")]
-    pub names: Vec<String>,
-}
 
-#[derive(Debug, Args)]
-pub struct Rulename{
-    pub names: Option<String>,
-}

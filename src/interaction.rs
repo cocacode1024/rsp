@@ -1,9 +1,9 @@
-use crate::cmd::common::{load_rules, load_ssh_config, PortForwardRule};
-
+use crate::cmd::common::{PortForwardRule, load_rules, load_ssh_config};
+use anyhow::Result;
 use dialoguer::Select;
 use dialoguer::{Input, MultiSelect, theme::ColorfulTheme};
 
-pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
+pub fn add_rule_form() -> Result<(String, PortForwardRule)> {
     let hosts = load_ssh_config()?;
     if hosts.is_empty() {
         return Err(anyhow::anyhow!("No hosts found in ~/.ssh/config"));
@@ -30,10 +30,10 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
         .interact_text()?;
 
     let section = Select::with_theme(&ColorfulTheme::default())
-    .with_prompt("RemoteHost")
-    .items(&hosts)
-    .default(0)
-    .interact()?;
+        .with_prompt("RemoteHost")
+        .items(&hosts)
+        .default(0)
+        .interact()?;
     let remote_host = hosts[section].clone();
 
     let local_port: u16 = Input::with_theme(&ColorfulTheme::default())
@@ -59,7 +59,7 @@ pub fn add_rule_form() -> anyhow::Result<(String, PortForwardRule)> {
 pub fn update_rule_form(
     name: &String,
     rule: &PortForwardRule,
-) -> anyhow::Result<(String, PortForwardRule)> {
+) -> Result<(String, PortForwardRule)> {
     let rules = load_rules()?;
     let name: String = Input::with_theme(&ColorfulTheme::default())
         .with_prompt("RuleName:")
@@ -107,7 +107,7 @@ pub fn select_rule() -> Option<String> {
         Ok(mut names) => {
             names.sort();
             names
-        },
+        }
         Err(_) => {
             return None;
         }
@@ -130,7 +130,7 @@ pub fn select_rules() -> Option<Vec<String>> {
             Ok(mut names) => {
                 names.sort();
                 names
-            },
+            }
             Err(_) => {
                 return None;
             }
@@ -168,10 +168,11 @@ pub fn select_rules() -> Option<Vec<String>> {
     }
 }
 
-pub fn get_rules_names() -> anyhow::Result<Vec<String>> {
+pub fn get_rules_names() -> Result<Vec<String>> {
     let rules = load_rules()?;
     let keys: Vec<String> = rules.keys().cloned().collect();
-    if keys.is_empty() {println!("No rules available.");
+    if keys.is_empty() {
+        println!("No rules available.");
         return Ok(vec![]);
     }
     Ok(keys)
