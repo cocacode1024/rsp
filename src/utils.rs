@@ -16,56 +16,50 @@ pub fn check_exist(mut names: Vec<String>) -> Result<Vec<String>> {
 }
 
 pub fn get_pid(port: u16) -> Result<u32> {
-    let lsof = Command::new("lsof")
-        .arg(format!("-i:{}", port))
-        .output()
-        .context("Failed to execute lsof command")?;
-
-    let lsof_output = String::from_utf8_lossy(&lsof.stdout);
-
-    if let Some(line) = lsof_output.lines().nth(1) {
-        if let Some(pid) = line.split_whitespace().nth(1) {
-            let pid = pid.parse::<u32>()?;
-            return Ok(pid);
-        }
-    }
-    anyhow::bail!("Failed to get portforward process PID");
-}
-
-pub fn get_ssh_pid_for_rule(local_port: u16, remote_port: u16, remote_host: &str) -> Result<u32> {
-    let pids = get_ssh_pids_for_rule(local_port, remote_port, remote_host)?;
+    let pids = get_listening_pids(port)?;
     pids.into_iter()
         .next()
-        .ok_or_else(|| anyhow::anyhow!("Failed to find matching SSH portforward PID"))
+        .ok_or_else(|| anyhow::anyhow!("Failed to get portforward process PID"))
 }
 
-pub fn get_ssh_pids_for_rule(local_port: u16, remote_port: u16, remote_host: &str) -> Result<Vec<u32>> {
+pub fn get_listening_pids(port: u16) -> Result<Vec<u32>> {
     let lsof = Command::new("lsof")
         .arg("-nP")
-        .arg(format!("-iTCP:{}", local_port))
+        .arg(format!("-iTCP:{}", port))
         .arg("-sTCP:LISTEN")
         .arg("-t")
         .output()
         .context("Failed to execute lsof command")?;
 
-    let signature = format!("127.0.0.1:{}:localhost:{}", local_port, remote_port);
-    let legacy_signature = format!("{}:localhost:{}", local_port, remote_port);
     let mut pids = Vec::new();
     for line in String::from_utf8_lossy(&lsof.stdout).lines() {
         let pid = match line.trim().parse::<u32>() {
             Ok(pid) => pid,
             Err(_) => continue,
         };
+        pids.push(pid);
+    }
+    Ok(pids)
+}
 
-        let ps = Command::new("ps")
-            .arg("-p")
-            .arg(pid.to_string())
-            .arg("-o")
-            .arg("command=")
-            .output()
-            .context("Failed to execute ps command")?;
+pub fn get_rule_process_pids(local_port: u16, remote_port: u16, remote_host: &str) -> Result<Vec<u32>> {
+    let ps = Command::new("ps")
+        .arg("-axo")
+        .arg("pid=,command=")
+        .output()
+        .context("Failed to execute ps command")?;
 
-        let command_line = String::from_utf8_lossy(&ps.stdout);
+    let signature = format!("127.0.0.1:{}:localhost:{}", local_port, remote_port);
+    let legacy_signature = format!("{}:localhost:{}", local_port, remote_port);
+    let mut pids = Vec::new();
+    for line in String::from_utf8_lossy(&ps.stdout).lines() {
+        let trimmed = line.trim();
+        let mut parts = trimmed.split_whitespace();
+        let pid = match parts.next().and_then(|value| value.parse::<u32>().ok()) {
+            Some(pid) => pid,
+            None => continue,
+        };
+        let command_line = parts.collect::<Vec<_>>().join(" ");
         if command_line.contains("ssh")
             && command_line.contains(remote_host)
             && command_line.contains("-L")
@@ -76,6 +70,50 @@ pub fn get_ssh_pids_for_rule(local_port: u16, remote_port: u16, remote_host: &st
     }
 
     Ok(pids)
+}
+
+pub fn resolve_rule_pid(
+    saved_pid: Option<u32>,
+    local_port: u16,
+    remote_port: u16,
+    remote_host: &str,
+) -> Result<Option<u32>> {
+    if let Some(pid) = saved_pid {
+        if process_matches_rule(pid, local_port, remote_port, remote_host)? {
+            return Ok(Some(pid));
+        }
+    }
+
+    for pid in get_rule_process_pids(local_port, remote_port, remote_host)? {
+        return Ok(Some(pid));
+    }
+
+    for pid in get_listening_pids(local_port)? {
+        if process_is_ssh(pid)? {
+            return Ok(Some(pid));
+        }
+        if process_matches_rule(pid, local_port, remote_port, remote_host)? {
+            return Ok(Some(pid));
+        }
+    }
+
+    Ok(None)
+}
+
+pub fn process_is_ssh(pid: u32) -> Result<bool> {
+    let ps = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("command=")
+        .output()
+        .context("Failed to execute ps command")?;
+
+    if !ps.status.success() {
+        return Ok(false);
+    }
+
+    Ok(String::from_utf8_lossy(&ps.stdout).contains("ssh"))
 }
 
 pub fn process_matches_rule(pid: u32, local_port: u16, remote_port: u16, remote_host: &str) -> Result<bool> {

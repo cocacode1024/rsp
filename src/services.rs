@@ -1,7 +1,8 @@
 use crate::cmd::common::{PortForwardRule, load_rules, load_ssh_config, save_rules};
-use crate::utils::{get_pid, get_ssh_pids_for_rule, process_matches_rule};
+use crate::utils::{get_listening_pids, get_pid, get_rule_process_pids, process_is_ssh, resolve_rule_pid};
 use anyhow::{Context, Result, bail};
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::collections::BTreeSet;
 use std::thread;
 use std::time::Duration;
 
@@ -23,10 +24,13 @@ pub fn refresh_status() -> Result<Vec<(String, PortForwardRule)>> {
     let mut changed = false;
 
     for rule in rules.values_mut() {
-        let current_pid = match rule.pid {
-            Some(pid) if process_matches_rule(pid, rule.local_port, rule.remote_port, &rule.remote_host).unwrap_or(false) => Some(pid),
-            _ => get_pid(rule.local_port).ok(),
-        };
+        let current_pid = resolve_rule_pid(
+            rule.pid,
+            rule.local_port,
+            rule.remote_port,
+            &rule.remote_host,
+        )
+        .unwrap_or(None);
 
         match current_pid {
             Some(pid) => {
@@ -101,7 +105,7 @@ pub fn start_rules(names: &[String]) -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("Rule '{name}' not found"))?;
 
         let existing_pids =
-            get_ssh_pids_for_rule(rule.local_port, rule.remote_port, &rule.remote_host)
+            get_rule_process_pids(rule.local_port, rule.remote_port, &rule.remote_host)
                 .unwrap_or_default();
         if !existing_pids.is_empty() {
             for pid in existing_pids {
@@ -112,11 +116,21 @@ pub fn start_rules(names: &[String]) -> Result<()> {
             thread::sleep(Duration::from_millis(300));
         }
         check_host_forward_conflict(&rule)?;
-        if get_pid(rule.local_port).is_ok() {
-            bail!("Local port {} is already in use by another process", rule.local_port);
+        if let Ok(listeners) = get_listening_pids(rule.local_port) {
+            let has_foreign_listener = listeners.into_iter().any(|pid| {
+                !get_rule_process_pids(rule.local_port, rule.remote_port, &rule.remote_host)
+                    .unwrap_or_default()
+                    .contains(&pid)
+            });
+            if has_foreign_listener {
+                bail!(
+                    "Local port {} is already in use by another process",
+                    rule.local_port
+                );
+            }
         }
 
-        let output = Command::new("ssh")
+        let status = Command::new("ssh")
             .arg("-f")
             .arg("-N")
             .arg("-C")
@@ -132,15 +146,17 @@ pub fn start_rules(names: &[String]) -> Result<()> {
                 rule.local_port, rule.remote_port
             ))
             .arg(&rule.remote_host)
-            .output()
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
             .context("Failed to execute ssh command")?;
 
-        if !output.status.success() {
-            let error = String::from_utf8_lossy(&output.stderr);
-            bail!("Failed to start '{name}': {}", error.trim());
+        if !status.success() {
+            bail!("Failed to start '{name}': ssh exited with status {}", status);
         }
 
-        let pid = wait_for_rule_ready(rule.local_port)
+        let pid = wait_for_rule_ready(rule.pid, rule.local_port, rule.remote_port, &rule.remote_host)
             .with_context(|| format!("Failed to start '{name}'"))?;
         if let Some(target) = rules.get_mut(name) {
             target.pid = Some(pid);
@@ -158,11 +174,34 @@ pub fn stop_rules(names: &[String]) -> Result<()> {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Rule '{name}' not found"))?;
 
-        let pids = get_ssh_pids_for_rule(rule.local_port, rule.remote_port, &rule.remote_host)
-            .unwrap_or_default();
-        for pid in pids {
-            kill_pid(pid).with_context(|| format!("Failed to stop '{name}'"))?;
+        let mut pids = BTreeSet::new();
+
+        if let Some(pid) = rule.pid {
+            pids.insert(pid);
         }
+
+        for pid in get_rule_process_pids(rule.local_port, rule.remote_port, &rule.remote_host)
+            .unwrap_or_default()
+        {
+            pids.insert(pid);
+        }
+
+        for pid in get_listening_pids(rule.local_port).unwrap_or_default() {
+            if process_is_ssh(pid).unwrap_or(false) {
+                pids.insert(pid);
+            }
+        }
+
+        for pid in pids {
+            match kill_pid(pid) {
+                Ok(()) => {}
+                Err(err) if is_missing_process_error(&err) => {}
+                Err(err) => return Err(err).with_context(|| format!("Failed to stop '{name}'")),
+            }
+        }
+
+        wait_for_rule_stopped(rule.local_port, rule.remote_port, &rule.remote_host)
+            .with_context(|| format!("Failed to stop '{name}'"))?;
 
         if let Some(target) = rules.get_mut(name) {
             target.pid = None;
@@ -183,6 +222,11 @@ fn kill_pid(pid: u32) -> Result<()> {
         bail!("{}", error.trim());
     }
     Ok(())
+}
+
+fn is_missing_process_error(err: &anyhow::Error) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("no such process")
 }
 
 pub fn all_rule_names(rules: &[(String, PortForwardRule)]) -> Vec<String> {
@@ -239,17 +283,55 @@ fn validate_rule(
     Ok(())
 }
 
-fn wait_for_rule_ready(local_port: u16) -> Result<u32> {
-    for _ in 0..40 {
-        if let Ok(pid) = get_pid(local_port) {
-            return Ok(pid);
+fn wait_for_rule_ready(
+    saved_pid: Option<u32>,
+    local_port: u16,
+    remote_port: u16,
+    remote_host: &str,
+) -> Result<u32> {
+    let mut stable_pid = None;
+    let mut stable_samples = 0;
+
+    for _ in 0..50 {
+        if let Some(pid) = resolve_rule_pid(saved_pid, local_port, remote_port, remote_host)? {
+            if stable_pid == Some(pid) {
+                stable_samples += 1;
+            } else {
+                stable_pid = Some(pid);
+                stable_samples = 1;
+            }
+
+            if stable_samples >= 50 {
+                return Ok(pid);
+            }
+        } else {
+            stable_pid = None;
+            stable_samples = 0;
         }
-        thread::sleep(Duration::from_millis(250));
+        thread::sleep(Duration::from_millis(100));
     }
 
     bail!(
         "ssh process started but local listener 127.0.0.1:{} was not established",
         local_port,
+    )
+}
+
+fn wait_for_rule_stopped(local_port: u16, remote_port: u16, remote_host: &str) -> Result<()> {
+    for _ in 0..50 {
+        if resolve_rule_pid(None, local_port, remote_port, remote_host)?.is_none() {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+
+    if get_pid(local_port).is_err() {
+        return Ok(());
+    }
+
+    bail!(
+        "ssh listener for 127.0.0.1:{} is still running after stop",
+        local_port
     )
 }
 

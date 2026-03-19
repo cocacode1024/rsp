@@ -2,6 +2,7 @@ use crate::cmd::common::PortForwardRule;
 use crate::services;
 use anyhow::Result;
 use eframe::egui::{self, Align, Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
+use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
@@ -42,6 +43,7 @@ enum WorkerCommand {
 struct WorkerEvent {
     dashboard: Option<DashboardData>,
     message: Option<UiMessage>,
+    completed_rules: Vec<String>,
 }
 
 struct RspGuiApp {
@@ -52,12 +54,19 @@ struct RspGuiApp {
     message: Option<UiMessage>,
     last_refresh_at: Instant,
     pending_jobs: usize,
+    pending_rules: HashMap<String, PendingRuleState>,
     worker: WorkerHandle,
 }
 
 struct UiMessage {
     text: String,
     error: bool,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PendingRuleState {
+    Starting,
+    Stopping,
 }
 
 #[derive(Default)]
@@ -82,6 +91,7 @@ impl RspGuiApp {
             message: None,
             last_refresh_at: Instant::now(),
             pending_jobs: 0,
+            pending_rules: HashMap::new(),
             worker,
         };
         app.request_refresh(None);
@@ -109,8 +119,16 @@ impl RspGuiApp {
         if names.is_empty() {
             return;
         }
-        if self.worker.tx.send(WorkerCommand::Start(names, summary)).is_ok() {
+        if self
+            .worker
+            .tx
+            .send(WorkerCommand::Start(names.clone(), summary))
+            .is_ok()
+        {
             self.pending_jobs += 1;
+            for name in names {
+                self.pending_rules.insert(name, PendingRuleState::Starting);
+            }
         } else {
             self.set_error("Background worker is not available".to_string());
         }
@@ -120,8 +138,16 @@ impl RspGuiApp {
         if names.is_empty() {
             return;
         }
-        if self.worker.tx.send(WorkerCommand::Stop(names, summary)).is_ok() {
+        if self
+            .worker
+            .tx
+            .send(WorkerCommand::Stop(names.clone(), summary))
+            .is_ok()
+        {
             self.pending_jobs += 1;
+            for name in names {
+                self.pending_rules.insert(name, PendingRuleState::Stopping);
+            }
         } else {
             self.set_error("Background worker is not available".to_string());
         }
@@ -130,6 +156,9 @@ impl RspGuiApp {
     fn process_worker_events(&mut self) {
         while let Ok(event) = self.worker.rx.try_recv() {
             self.pending_jobs = self.pending_jobs.saturating_sub(1);
+            for name in event.completed_rules {
+                self.pending_rules.remove(&name);
+            }
             if let Some(dashboard) = event.dashboard {
                 self.apply_dashboard(dashboard);
             }
@@ -147,6 +176,10 @@ impl RspGuiApp {
         self.pending_jobs > 0
     }
 
+    fn pending_state(&self, name: &str) -> Option<PendingRuleState> {
+        self.pending_rules.get(name).copied()
+    }
+
     fn set_error(&mut self, text: String) {
         self.message = Some(UiMessage { text, error: true });
     }
@@ -155,6 +188,30 @@ impl RspGuiApp {
         self.form = RuleForm::default();
         self.form.remote_host = self.hosts.first().cloned().unwrap_or_default();
         self.selected = None;
+    }
+
+    fn sort_rules(&mut self) {
+        self.rules.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    fn upsert_rule_in_view(&mut self, name: String, rule: PortForwardRule) {
+        if let Some((_, current_rule)) = self
+            .rules
+            .iter_mut()
+            .find(|(rule_name, _)| rule_name == &name)
+        {
+            *current_rule = rule;
+        } else {
+            self.rules.push((name, rule));
+        }
+        self.sort_rules();
+    }
+
+    fn remove_rule_from_view(&mut self, name: &str) {
+        self.rules.retain(|(rule_name, _)| rule_name != name);
+        if self.selected.as_deref() == Some(name) {
+            self.clear_form();
+        }
     }
 
     fn load_into_form(&mut self, name: &str, rule: &PortForwardRule) {
@@ -194,8 +251,9 @@ impl RspGuiApp {
         };
 
         let rule = services::make_rule(local_port, remote_port, remote_host, false, None);
+        let original_name = self.form.original_name.clone();
 
-        let result = if let Some(original_name) = self.form.original_name.clone() {
+        let result = if let Some(original_name) = original_name.clone() {
             services::update_rule(&original_name, name, rule)
                 .map(|_| format!("Rule '{}' updated", original_name))
         } else {
@@ -204,6 +262,21 @@ impl RspGuiApp {
 
         match result {
             Ok(_) => {
+                let updated_name = self.form.name.trim().to_string();
+                let updated_rule = services::make_rule(
+                    local_port,
+                    remote_port,
+                    self.form.remote_host.trim().to_string(),
+                    false,
+                    None,
+                );
+                if let Some(old_name) = original_name {
+                    if old_name != updated_name {
+                        self.remove_rule_from_view(&old_name);
+                    }
+                }
+                self.upsert_rule_in_view(updated_name.clone(), updated_rule);
+                self.selected = Some(updated_name);
                 self.request_refresh(None);
                 self.clear_form();
             }
@@ -214,10 +287,8 @@ impl RspGuiApp {
     fn delete_rule(&mut self, name: &str) {
         match services::remove_rule(name) {
             Ok(_) => {
+                self.remove_rule_from_view(name);
                 self.request_refresh(None);
-                if self.selected.as_deref() == Some(name) {
-                    self.clear_form();
-                }
             }
             Err(err) => self.set_error(err.to_string()),
         }
@@ -417,18 +488,27 @@ impl eframe::App for RspGuiApp {
                                     ui.label(rule.remote_port.to_string());
                                     ui.label(rule.remote_host.clone());
 
-                                    let (status, fill, text) = if rule.status {
-                                        (
+                                    let (status, fill, text) = match self.pending_state(&name) {
+                                        Some(PendingRuleState::Starting) => (
+                                            "Starting...",
+                                            Color32::from_rgb(225, 235, 248),
+                                            Color32::from_rgb(48, 92, 150),
+                                        ),
+                                        Some(PendingRuleState::Stopping) => (
+                                            "Stopping...",
+                                            Color32::from_rgb(236, 235, 232),
+                                            Color32::from_rgb(108, 105, 98),
+                                        ),
+                                        None if rule.status => (
                                             "Running",
                                             Color32::from_rgb(226, 242, 231),
                                             Color32::from_rgb(42, 125, 73),
-                                        )
-                                    } else {
-                                        (
+                                        ),
+                                        None => (
                                             "Stopped",
                                             Color32::from_rgb(248, 234, 207),
                                             Color32::from_rgb(145, 98, 24),
-                                        )
+                                        ),
                                     };
                                     Frame::new()
                                         .fill(fill)
@@ -445,8 +525,17 @@ impl eframe::App for RspGuiApp {
                                     );
 
                                     ui.horizontal(|ui| {
-                                        let action = if rule.status { "Stop" } else { "Start" };
-                                        if ui.button(action).clicked() {
+                                        let pending = self.pending_state(&name);
+                                        let action = match pending {
+                                            Some(PendingRuleState::Starting) => "Starting...",
+                                            Some(PendingRuleState::Stopping) => "Stopping...",
+                                            None if rule.status => "Stop",
+                                            None => "Start",
+                                        };
+                                        let clicked = ui
+                                            .add_enabled(pending.is_none(), egui::Button::new(action))
+                                            .clicked();
+                                        if clicked {
                                             if rule.status {
                                                 self.request_stop(
                                                     vec![name.clone()],
@@ -502,6 +591,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                     Ok((rules, hosts)) => WorkerEvent {
                         dashboard: Some(DashboardData { rules, hosts }),
                         message: summary.map(|text| UiMessage { text, error: false }),
+                        completed_rules: Vec::new(),
                     },
                     Err(err) => WorkerEvent {
                         dashboard: None,
@@ -509,6 +599,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                             text: err.to_string(),
                             error: true,
                         }),
+                        completed_rules: Vec::new(),
                     },
                 },
                 WorkerCommand::Start(names, summary) => match services::start_rules(&names)
@@ -520,6 +611,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                             text: summary,
                             error: false,
                         }),
+                        completed_rules: names,
                     },
                     Err(err) => WorkerEvent {
                         dashboard: services::load_dashboard()
@@ -529,6 +621,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                             text: err.to_string(),
                             error: true,
                         }),
+                        completed_rules: names,
                     },
                 },
                 WorkerCommand::Stop(names, summary) => match services::stop_rules(&names)
@@ -540,6 +633,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                             text: summary,
                             error: false,
                         }),
+                        completed_rules: names,
                     },
                     Err(err) => WorkerEvent {
                         dashboard: services::load_dashboard()
@@ -549,6 +643,7 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
                             text: err.to_string(),
                             error: true,
                         }),
+                        completed_rules: names,
                     },
                 },
             };
