@@ -1,15 +1,16 @@
 # RSP (Rust SSH Port Forward)
 
-RSP is an SSH port forwarding management tool written in Rust, providing a simple and intuitive command-line interface to help you manage multiple SSH port forwarding rules.
+RSP is an SSH port forwarding management tool written in Rust. It provides both a command-line interface and a desktop GUI for managing multiple SSH port forwarding rules.
 
 ## Features
 
 - Manage multiple port forwarding rules
 - Interactive command-line interface
+- Desktop GUI
 - CRUD operations for rules
 - Start/stop single or multiple rules
 - Automatic rule status checking
-- Automatic detection and restart options for abnormal termination
+- Status refresh based on actual listener state
 
 ## System Compatibility
 
@@ -26,6 +27,10 @@ Currently only tested on macOS, compatibility with other operating systems has n
 ### Basic Commands
 
 ```bash
+# Launch GUI
+rsp
+rsp gui
+
 # Add new rule
 rsp add
 
@@ -53,6 +58,33 @@ rsp edit [rule_name]      # Edit specific rule
 rsp check [rule_name]     # Check specific rule status
 rsp check all            # Check all rules status
 ```
+
+### GUI
+
+The GUI entry point is:
+
+```bash
+rsp
+```
+
+or:
+
+```bash
+rsp gui
+```
+
+Current GUI capabilities:
+- View the rule list
+- Create, edit, and delete rules
+- Start and stop individual rules
+- Start and stop all rules
+- View live rule status and PID
+
+Status meanings:
+- `Starting...`: the start request was submitted and the SSH tunnel is being established
+- `Running`: the local listener has been confirmed
+- `Stopping...`: the stop request was submitted and the SSH process is being terminated
+- `Stopped`: no matching listener is currently detected
 
 ### Rule Configuration Example
 
@@ -93,7 +125,14 @@ RSP saves rule configurations in the `~/.rsp.json` file. The configuration file 
    - Check if SSH configuration is correct
    - Verify if local port is available
    - Check if remote host is accessible
+   - If `~/.ssh/config` already defines a conflicting `LocalForward` for the same `Host`, it can conflict with the rule
 
 2. **Port forwarding disconnects unexpectedly**
    - Use `rsp check` command to check status
-   - Choose between automatic or manual rule restart 
+   - Use `Refresh` in the GUI to resync the displayed state
+   - Restart the rule manually
+
+3. **Start does not become Running immediately**
+   - This is expected
+   - The GUI shows `Starting...` first
+   - It switches to `Running` only after the listener is actually confirmed, which avoids false-success states
