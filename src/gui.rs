@@ -11,7 +11,7 @@ pub fn run() -> Result<()> {
         let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1120.0, 720.0])
-            .with_min_inner_size([900.0, 560.0])
+            .with_min_inner_size([720.0, 520.0])
             .with_title("RSP"),
         ..Default::default()
     };
@@ -383,8 +383,8 @@ impl eframe::App for RspGuiApp {
 
         egui::SidePanel::right("editor")
             .resizable(true)
-            .default_width(430.0)
-            .min_width(390.0)
+            .default_width(380.0)
+            .min_width(300.0)
             .show(ctx, |ui| {
                 egui::ScrollArea::vertical()
                     .auto_shrink([false, false])
@@ -461,46 +461,55 @@ impl eframe::App for RspGuiApp {
                                     .stroke(Stroke::new(1.0, border_color(self.theme_mode)))
                                     .inner_margin(Margin::same(18))
                                     .show(ui, |ui| {
+                                        let compact = ui.available_width() < 340.0;
                                         ui.label(
                                             RichText::new("Port Mapping")
                                                 .size(12.0)
                                                 .color(secondary_text(self.theme_mode)),
                                         );
                                         ui.add_space(10.0);
-                                        ui.columns(2, |columns| {
-                                            columns[0].label(RichText::new("Local Port").color(primary_text(self.theme_mode)));
-                                            columns[0].text_edit_singleline(&mut self.form.local_port);
-                                            columns[1].label(RichText::new("Remote Port").color(primary_text(self.theme_mode)));
-                                            columns[1].text_edit_singleline(&mut self.form.remote_port);
-                                        });
+                                        if compact {
+                                            ui.label(RichText::new("Local Port").color(primary_text(self.theme_mode)));
+                                            ui.text_edit_singleline(&mut self.form.local_port);
+                                            ui.add_space(10.0);
+                                            ui.label(RichText::new("Remote Port").color(primary_text(self.theme_mode)));
+                                            ui.text_edit_singleline(&mut self.form.remote_port);
+                                        } else {
+                                            ui.columns(2, |columns| {
+                                                columns[0].label(RichText::new("Local Port").color(primary_text(self.theme_mode)));
+                                                columns[0].text_edit_singleline(&mut self.form.local_port);
+                                                columns[1].label(RichText::new("Remote Port").color(primary_text(self.theme_mode)));
+                                                columns[1].text_edit_singleline(&mut self.form.remote_port);
+                                            });
+                                        }
                                     });
 
                                 ui.add_space(16.0);
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     let save_label = if self.form.original_name.is_some() {
                                         "Save Changes"
                                     } else {
                                         "Create Rule"
                                     };
                                     if ui
-                                        .add_sized(
-                                            [140.0, 40.0],
+                                        .add(
                                             Button::new(RichText::new(save_label).color(button_text(self.theme_mode, true)))
                                                 .fill(primary_button_fill(self.theme_mode))
                                                 .stroke(Stroke::NONE)
-                                                .corner_radius(CornerRadius::same(18)),
+                                                .corner_radius(CornerRadius::same(18))
+                                                .min_size(egui::vec2(140.0, 40.0)),
                                         )
                                         .clicked()
                                     {
                                         self.save_form();
                                     }
                                     if ui
-                                        .add_sized(
-                                            [112.0, 40.0],
+                                        .add(
                                             Button::new(RichText::new("Reset").color(button_text(self.theme_mode, false)))
                                                 .fill(secondary_button_fill(self.theme_mode))
                                                 .stroke(Stroke::new(1.0, button_stroke(self.theme_mode)))
-                                                .corner_radius(CornerRadius::same(18)),
+                                                .corner_radius(CornerRadius::same(18))
+                                                .min_size(egui::vec2(112.0, 40.0)),
                                         )
                                         .clicked()
                                     {
@@ -667,9 +676,7 @@ impl eframe::App for RspGuiApp {
                                             });
 
                                         ui.add_space(10.0);
-                                        ui.horizontal(|ui| {
-                                            ui.add_space(ui.available_width().max(0.0) - 252.0);
-
+                                        ui.horizontal_wrapped(|ui| {
                                             let action = match pending {
                                                 Some(PendingRuleState::Starting) => "Starting...",
                                                 Some(PendingRuleState::Stopping) => "Stopping...",
