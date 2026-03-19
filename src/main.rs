@@ -1,6 +1,8 @@
 mod cli;
 mod cmd;
+mod gui;
 mod interaction;
+mod services;
 mod utils;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

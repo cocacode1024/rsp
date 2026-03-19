@@ -1,12 +1,11 @@
 use super::common::PortForwardRule;
-use crate::cmd::common::{load_rules, save_rules};
+use crate::cmd::common::load_rules;
 use crate::interaction::select_rules;
-use crate::utils::{check_exist, get_pid};
-use anyhow::{Context, Result};
+use crate::services;
+use crate::utils::check_exist;
+use anyhow::Result;
 use dialoguer::Select;
 use std::collections::HashMap;
-
-use std::process::Command;
 
 pub async fn stop_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let options = vec!["Yes", "No"];
@@ -67,29 +66,10 @@ pub async fn stop_input(
 
 pub async fn stop_forward_force(
     names: &Vec<String>,
-    rules: &mut HashMap<String, PortForwardRule>,
+    _rules: &mut HashMap<String, PortForwardRule>,
 ) -> Result<()> {
+    services::stop_rules(names)?;
     for name in names {
-        if let Some(rule) = rules.get_mut(name) {
-            let local_port = rule.local_port;
-            if let Ok(pid) = get_pid(local_port) {
-                let output = Command::new("kill")
-                    .arg("-9")
-                    .arg(pid.to_string())
-                    .output()
-                    .context("Failed to execute kill -9 command")?;
-                if !output.status.success() {
-                    let error = String::from_utf8_lossy(&output.stderr);
-                    anyhow::bail!(
-                        "Stoping SSH portforward process exited abnormally: {}",
-                        error
-                    );
-                }
-            };
-            rule.pid = None;
-            rule.status = false;
-            save_rules(&rules)?;
-        }
         println!("Rule '{}' stopped.", name);
     }
     Ok(())

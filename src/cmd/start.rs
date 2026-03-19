@@ -1,11 +1,11 @@
 use super::common::PortForwardRule;
-use crate::cmd::common::save_rules;
 use crate::interaction::select_rules;
+use crate::services;
 use crate::utils::check_exist;
-use crate::{cmd::common::load_rules, utils::get_pid};
-use anyhow::{Context, Ok, Result};
+use crate::cmd::common::load_rules;
+use anyhow::Result;
 use dialoguer::Select;
-use std::{collections::HashMap, process::Command};
+use std::collections::HashMap;
 
 async fn start_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let options = vec!["Yes", "No"];
@@ -62,42 +62,11 @@ async fn start_input(
 
 pub async fn start_forward_force(
     names: &Vec<String>,
-    rules: &mut HashMap<String, PortForwardRule>,
+    _rules: &mut HashMap<String, PortForwardRule>,
 ) -> Result<()> {
+    services::start_rules(names)?;
     for name in names {
-        if let Some(rule) = rules.get_mut(name) {
-            println!(
-                "Rule '{}' starting, localhost:{} -> {}:{}",
-                name, rule.local_port, rule.remote_host, rule.remote_port
-            );
-
-            let output = Command::new("ssh")
-                .arg("-f")
-                .arg("-N")
-                .arg("-C")
-                .arg("-g")
-                .arg("-L")
-                .arg(format!(
-                    "{}:localhost:{}",
-                    rule.local_port, rule.remote_port
-                ))
-                .arg(format!("{}", rule.remote_host))
-                .output()
-                .context("Failed to execute SSH command")?;
-
-            if !output.status.success() {
-                let error = String::from_utf8_lossy(&output.stderr);
-                anyhow::bail!("SSH portforward process exited abnormally: {}", error);
-            }
-            let pid = get_pid(rule.local_port)?;
-            let mut rules = load_rules()?;
-            if let Some(rule) = rules.get_mut(name) {
-                rule.pid = Some(pid);
-                rule.status = true;
-                save_rules(&rules)?;
-            }
-            println!("SSH port forward is running in background, PID: {}", pid);
-        }
+        println!("Rule '{}' started.", name);
     }
     Ok(())
 }

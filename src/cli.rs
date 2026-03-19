@@ -5,6 +5,7 @@ use crate::cmd::list::list_rules;
 use crate::cmd::remove::remove_rules;
 use crate::cmd::start::start_forward;
 use crate::cmd::stop::stop_forward;
+use crate::gui;
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
@@ -12,7 +13,7 @@ use clap::{Args, Parser, Subcommand};
 #[command(about = "A SSH-based portforward tool", version)]
 pub struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -59,6 +60,8 @@ enum Commands {
         disable_help_flag = false
     )]
     Check(Rulenames),
+    #[command(name = "gui", about = "Launch the graphical interface")]
+    Gui,
 }
 
 #[derive(Debug, Args)]
@@ -76,29 +79,32 @@ impl Cli {
     pub async fn run() -> anyhow::Result<()> {
         let cli = Cli::parse();
         match &cli.command {
-            Commands::Add => {
+            None | Some(Commands::Gui) => {
+                gui::run()?;
+            }
+            Some(Commands::Add) => {
                 add_rule()?;
             }
-            Commands::Remove(args) => {
+            Some(Commands::Remove(args)) => {
                 let names = args.names.clone();
                 remove_rules(names)?;
             }
-            Commands::Edit(name) => {
+            Some(Commands::Edit(name)) => {
                 let name = name.names.clone().unwrap_or_default();
                 edit_rule(name)?;
             }
-            Commands::List => {
+            Some(Commands::List) => {
                 list_rules()?;
             }
-            Commands::Start(args) => {
+            Some(Commands::Start(args)) => {
                 let names = args.names.clone();
                 start_forward(names).await?;
             }
-            Commands::Stop(args) => {
+            Some(Commands::Stop(args)) => {
                 let names = args.names.clone();
                 stop_forward(names).await?;
             }
-            Commands::Check(args) => {
+            Some(Commands::Check(args)) => {
                 let names = args.names.clone();
                 check_rules(names).await?;
             }
@@ -106,4 +112,3 @@ impl Cli {
         Ok(())
     }
 }
-
