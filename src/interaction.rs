@@ -19,13 +19,6 @@ pub fn add_rule_form() -> Result<(String, PortForwardRule)> {
                 Ok(())
             }
         })
-        .validate_with(|input: &String| {
-            if input == "all" {
-                Err(format!("'all' is keyword , please input another name."))
-            } else {
-                Ok(())
-            }
-        })
         .allow_empty(false)
         .interact_text()?;
 

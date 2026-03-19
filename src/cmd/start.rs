@@ -7,26 +7,6 @@ use anyhow::Result;
 use dialoguer::Select;
 use std::collections::HashMap;
 
-async fn start_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
-    let options = vec!["Yes", "No"];
-    let selection = Select::new()
-        .with_prompt(format!(
-            "Are you sure you want to start all rules? Running rules will not be affected."
-        ))
-        .items(&options)
-        .default(1)
-        .interact()?;
-
-    if selection == 0 {
-        let names = rules.keys().cloned().collect::<Vec<String>>();
-        start_forward_force(&names, rules).await?;
-        println!("All rules started.");
-    } else {
-        println!("The operation was cancelled.");
-    };
-    Ok(())
-}
-
 async fn start_selected(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = select_rules().unwrap_or_default();
     if names.is_empty() {
@@ -76,10 +56,6 @@ pub async fn start_forward(names: Vec<String>) -> Result<()> {
 
     if names.is_empty() {
         start_selected(&mut rules).await?;
-        return Ok(());
-    }
-    if names == vec!["all"] {
-        start_all(&mut rules).await?;
         return Ok(());
     }
 

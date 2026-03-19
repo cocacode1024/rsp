@@ -89,9 +89,6 @@ pub fn resolve_rule_pid(
     }
 
     for pid in get_listening_pids(local_port)? {
-        if process_is_ssh(pid)? {
-            return Ok(Some(pid));
-        }
         if process_matches_rule(pid, local_port, remote_port, remote_host)? {
             return Ok(Some(pid));
         }

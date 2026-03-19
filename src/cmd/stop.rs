@@ -7,25 +7,6 @@ use anyhow::Result;
 use dialoguer::Select;
 use std::collections::HashMap;
 
-pub async fn stop_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
-    let options = vec!["Yes", "No"];
-
-    let selection = Select::new()
-        .with_prompt("Are you sure you want to stop all rules?")
-        .items(&options)
-        .default(1)
-        .interact()?;
-
-    if selection == 0 {
-        let names = rules.keys().cloned().collect::<Vec<String>>();
-        stop_forward_force(&names, rules).await?;
-        println!("All rules stopped.");
-    } else {
-        println!("The operation was cancelled.");
-    };
-    Ok(())
-}
-
 pub async fn stop_selected(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = select_rules().unwrap_or_default();
     if names.is_empty() {
@@ -79,11 +60,6 @@ pub async fn stop_forward(names: Vec<String>) -> Result<()> {
     let mut rules = load_rules()?;
     if names.is_empty() {
         stop_selected(&mut rules).await?;
-        return Ok(());
-    };
-
-    if names == vec!["all"] {
-        stop_all(&mut rules).await?;
         return Ok(());
     };
 

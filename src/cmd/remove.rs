@@ -5,50 +5,6 @@ use anyhow::{Ok, Result};
 use dialoguer::Select;
 use std::collections::HashMap;
 
-fn remove_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
-    if rules.is_empty() {
-        println!("There is no rule to remove.");
-        return Ok(());
-    };
-    let mut to_remove = vec![];
-    for (name, rule) in rules.iter() {
-        if rule.status {
-            println!("Rule {} is running, please stop it first.", name);
-        } else {
-            to_remove.push(name.to_string());
-        }
-    }
-    if to_remove.is_empty() {
-        println!("There is no rule to remove.");
-        return Ok(());
-    }
-    let options = vec!["Yes", "No"];
-    let selection = Select::new()
-        .with_prompt(format!(
-            "Are you sure you want to remove {} rule{}: {} ? This action cannot be undone",
-            if to_remove.len() == 1 {
-                "this"
-            } else {
-                "these"
-            },
-            if to_remove.len() == 1 { "" } else { "s" },
-            to_remove.join(", ")
-        ))
-        .items(&options)
-        .default(1)
-        .interact()?;
-    if selection == 0 {
-        for name in to_remove {
-            rules.remove(&name);
-        }
-        save_rules(&rules)?;
-        println!("Rule(s) removed.");
-    } else {
-        println!("Rule(s) removal canceled.");
-    }
-    Ok(())
-}
-
 fn remove_selected(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
     let names = select_rules().unwrap_or_default();
     if names.is_empty() {
@@ -146,10 +102,6 @@ pub fn remove_rules(names: Vec<String>) -> Result<()> {
     let mut rules = load_rules()?;
     if names.is_empty() {
         remove_selected(&mut rules)?;
-        return Ok(());
-    };
-    if names == vec!["all"] {
-        remove_all(&mut rules)?;
         return Ok(());
     };
     remove_input(names, &mut rules)?;

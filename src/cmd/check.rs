@@ -113,12 +113,6 @@ async fn check_running(
     Ok(())
 }
 
-async fn check_all(rules: &mut HashMap<String, PortForwardRule>) -> Result<()> {
-    let names = rules.keys().cloned().collect::<Vec<String>>();
-    check_running(names, rules).await?;
-    Ok(())
-}
-
 async fn check_input(
     names: Vec<String>,
     rules: &mut HashMap<String, PortForwardRule>,
@@ -153,11 +147,6 @@ pub async fn check_rules(names: Vec<String>) -> Result<()> {
     let mut rules = load_rules()?;
     if names.is_empty() {
         check_selected(&mut rules).await?;
-        return Ok(());
-    };
-
-    if names == vec!["all"] {
-        check_all(&mut rules).await?;
         return Ok(());
     };
 

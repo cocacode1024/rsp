@@ -1,18 +1,18 @@
 use crate::cmd::common::PortForwardRule;
 use crate::services;
 use anyhow::Result;
-use eframe::egui::{self, Align, Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
+use eframe::egui::{self, Align, Button, Color32, CornerRadius, Frame, Margin, RichText, Stroke, Vec2};
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::Instant;
 
 pub fn run() -> Result<()> {
-    let options = eframe::NativeOptions {
+        let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1120.0, 720.0])
             .with_min_inner_size([900.0, 560.0])
-            .with_title("RSP - SSH Port Forward Manager"),
+            .with_title("RSP"),
         ..Default::default()
     };
 
@@ -307,38 +307,62 @@ impl eframe::App for RspGuiApp {
 
         egui::TopBottomPanel::top("toolbar").show(ctx, |ui| {
             Frame::new()
-                .fill(Color32::from_rgb(244, 239, 229))
-                .inner_margin(Margin::symmetric(18, 16))
+                .fill(Color32::from_rgb(246, 247, 249))
+                .stroke(Stroke::new(1.0, Color32::from_rgb(226, 228, 233)))
+                .inner_margin(Margin::symmetric(20, 16))
                 .show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.vertical(|ui| {
                             ui.label(
                                 RichText::new("RSP")
-                                    .size(28.0)
+                                    .size(24.0)
                                     .strong()
-                                    .color(Color32::from_rgb(34, 59, 45)),
+                                    .color(Color32::from_rgb(30, 34, 42)),
                             );
                             ui.label(
-                                RichText::new("SSH port forwarding with a real desktop control plane")
-                                    .color(Color32::from_rgb(97, 91, 78)),
+                                RichText::new("SSH port forwarding, shaped like a native desktop tool")
+                                    .color(Color32::from_rgb(108, 114, 126)),
                             );
                         });
+                        ui.add_space(12.0);
+                        let status_text = if self.pending_jobs > 0 {
+                            format!("{} task running", self.pending_jobs)
+                        } else {
+                            format!("{} rules", self.rules.len())
+                        };
+                        Frame::new()
+                            .fill(Color32::from_rgb(235, 239, 245))
+                            .corner_radius(CornerRadius::same(255))
+                            .inner_margin(Margin::symmetric(10, 6))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new(status_text)
+                                        .size(12.0)
+                                        .color(Color32::from_rgb(83, 91, 107)),
+                                );
+                            });
                         ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                            if ui.button("Stop All").clicked() {
-                                let names = services::all_rule_names(&self.rules);
-                                self.request_stop(names, "All rules stopped".to_string());
-                                ctx.request_repaint();
-                            }
-                            if ui.button("Start All").clicked() {
-                                let names = services::all_rule_names(&self.rules);
-                                self.request_start(names, "All rules started".to_string());
-                                ctx.request_repaint();
-                            }
-                            if ui.button("New Rule").clicked() {
+                            if ui
+                                .add(
+                                    Button::new("New Rule")
+                                        .fill(Color32::from_rgb(55, 96, 208))
+                                        .stroke(Stroke::NONE)
+                                        .corner_radius(CornerRadius::same(10)),
+                                )
+                                .clicked()
+                            {
                                 self.clear_form();
                                 ctx.request_repaint();
                             }
-                            if ui.button("Refresh").clicked() {
+                            if ui
+                                .add(
+                                    Button::new("Refresh")
+                                        .fill(Color32::from_rgb(239, 241, 245))
+                                        .stroke(Stroke::new(1.0, Color32::from_rgb(221, 224, 230)))
+                                        .corner_radius(CornerRadius::same(10)),
+                                )
+                                .clicked()
+                            {
                                 self.request_refresh(Some("Rules refreshed".to_string()));
                                 ctx.request_repaint();
                             }
@@ -349,57 +373,81 @@ impl eframe::App for RspGuiApp {
 
         egui::SidePanel::right("editor")
             .resizable(true)
-            .default_width(360.0)
+            .default_width(372.0)
             .show(ctx, |ui| {
                 Frame::new()
-                    .fill(Color32::from_rgb(247, 244, 237))
-                    .corner_radius(CornerRadius::same(18))
-                    .inner_margin(Margin::same(18))
+                    .fill(Color32::from_rgb(252, 252, 253))
+                    .corner_radius(CornerRadius::same(20))
+                    .stroke(Stroke::new(1.0, Color32::from_rgb(226, 228, 233)))
+                    .inner_margin(Margin::same(20))
                     .show(ui, |ui| {
-                        ui.heading(if self.form.original_name.is_some() {
-                            "Edit Rule"
-                        } else {
-                            "Create Rule"
-                        });
+                        ui.label(
+                            RichText::new(if self.form.original_name.is_some() {
+                                "Rule Editor"
+                            } else {
+                                "New Rule"
+                            })
+                            .size(22.0)
+                            .strong()
+                            .color(Color32::from_rgb(34, 38, 46)),
+                        );
                         ui.label(
                             RichText::new("Create or adjust a tunnel without leaving the desktop window")
-                                .color(Color32::from_rgb(97, 91, 78)),
+                                .color(Color32::from_rgb(108, 114, 126)),
                         );
-                        ui.add_space(12.0);
+                        ui.add_space(18.0);
 
-                        ui.label("Rule Name");
-                        ui.text_edit_singleline(&mut self.form.name);
-                        ui.add_space(8.0);
+                        Frame::new()
+                            .fill(Color32::from_rgb(246, 247, 249))
+                            .corner_radius(CornerRadius::same(16))
+                            .stroke(Stroke::new(1.0, Color32::from_rgb(229, 231, 236)))
+                            .inner_margin(Margin::same(16))
+                            .show(ui, |ui| {
+                                ui.label(
+                                    RichText::new("Connection")
+                                        .size(12.0)
+                                        .color(Color32::from_rgb(117, 123, 135)),
+                                );
+                                ui.add_space(8.0);
 
-                        ui.label("Remote Host");
-                        if self.hosts.is_empty() {
-                            ui.text_edit_singleline(&mut self.form.remote_host);
-                        } else {
-                            egui::ComboBox::from_id_salt("remote-host")
-                                .width(ui.available_width())
-                                .selected_text(if self.form.remote_host.is_empty() {
-                                    "Select a host"
+                                ui.label(RichText::new("Rule Name").color(Color32::from_rgb(70, 76, 89)));
+                                ui.text_edit_singleline(&mut self.form.name);
+                                ui.add_space(10.0);
+
+                                ui.label(RichText::new("Remote Host").color(Color32::from_rgb(70, 76, 89)));
+                                if self.hosts.is_empty() {
+                                    ui.text_edit_singleline(&mut self.form.remote_host);
                                 } else {
-                                    &self.form.remote_host
-                                })
-                                .show_ui(ui, |ui| {
-                                    for host in &self.hosts {
-                                        ui.selectable_value(
-                                            &mut self.form.remote_host,
-                                            host.clone(),
-                                            host,
-                                        );
-                                    }
-                                });
-                        }
-                        ui.add_space(8.0);
+                                    egui::ComboBox::from_id_salt("remote-host")
+                                        .width(ui.available_width())
+                                        .selected_text(if self.form.remote_host.is_empty() {
+                                            "Select a host"
+                                        } else {
+                                            &self.form.remote_host
+                                        })
+                                        .show_ui(ui, |ui| {
+                                            for host in &self.hosts {
+                                                ui.selectable_value(
+                                                    &mut self.form.remote_host,
+                                                    host.clone(),
+                                                    host,
+                                                );
+                                            }
+                                        });
+                                }
+                                ui.add_space(10.0);
 
-                        ui.columns(2, |columns| {
-                            columns[0].label("Local Port");
-                            columns[0].text_edit_singleline(&mut self.form.local_port);
-                            columns[1].label("Remote Port");
-                            columns[1].text_edit_singleline(&mut self.form.remote_port);
-                        });
+                                ui.columns(2, |columns| {
+                                    columns[0].label(
+                                        RichText::new("Local Port").color(Color32::from_rgb(70, 76, 89)),
+                                    );
+                                    columns[0].text_edit_singleline(&mut self.form.local_port);
+                                    columns[1].label(
+                                        RichText::new("Remote Port").color(Color32::from_rgb(70, 76, 89)),
+                                    );
+                                    columns[1].text_edit_singleline(&mut self.form.remote_port);
+                                });
+                            });
 
                         ui.add_space(14.0);
                         ui.horizontal(|ui| {
@@ -408,10 +456,26 @@ impl eframe::App for RspGuiApp {
                             } else {
                                 "Create Rule"
                             };
-                            if ui.button(save_label).clicked() {
+                            if ui
+                                .add(
+                                    Button::new(save_label)
+                                        .fill(Color32::from_rgb(55, 96, 208))
+                                        .stroke(Stroke::NONE)
+                                        .corner_radius(CornerRadius::same(10)),
+                                )
+                                .clicked()
+                            {
                                 self.save_form();
                             }
-                            if ui.button("Reset").clicked() {
+                            if ui
+                                .add(
+                                    Button::new("Reset")
+                                        .fill(Color32::from_rgb(239, 241, 245))
+                                        .stroke(Stroke::new(1.0, Color32::from_rgb(221, 224, 230)))
+                                        .corner_radius(CornerRadius::same(10)),
+                                )
+                                .clicked()
+                            {
                                 self.clear_form();
                             }
                         });
@@ -421,147 +485,228 @@ impl eframe::App for RspGuiApp {
                         ui.add_space(10.0);
                         if let Some(message) = &self.message {
                             let color = if message.error {
-                                Color32::from_rgb(196, 47, 47)
+                                Color32::from_rgb(184, 52, 48)
                             } else {
-                                Color32::from_rgb(42, 125, 73)
+                                Color32::from_rgb(41, 124, 85)
                             };
-                            ui.colored_label(color, &message.text);
+                            Frame::new()
+                                .fill(if message.error {
+                                    Color32::from_rgb(255, 242, 241)
+                                } else {
+                                    Color32::from_rgb(239, 249, 244)
+                                })
+                                .corner_radius(CornerRadius::same(12))
+                                .inner_margin(Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.colored_label(color, &message.text);
+                                });
                             ui.add_space(10.0);
                         }
-                        ui.label("Data source");
                         ui.label(
-                            RichText::new("Hosts: ~/.ssh/config").color(Color32::from_rgb(97, 91, 78)),
+                            RichText::new("Data Source")
+                                .size(12.0)
+                                .color(Color32::from_rgb(117, 123, 135)),
                         );
                         ui.label(
-                            RichText::new("Rules: ~/.rsp.json").color(Color32::from_rgb(97, 91, 78)),
+                            RichText::new("Hosts: ~/.ssh/config").color(Color32::from_rgb(108, 114, 126)),
+                        );
+                        ui.label(
+                            RichText::new("Rules: ~/.rsp.json").color(Color32::from_rgb(108, 114, 126)),
                         );
                     });
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             Frame::new()
-                .fill(Color32::from_rgb(252, 250, 246))
-                .corner_radius(CornerRadius::same(18))
-                .stroke(Stroke::new(1.0, Color32::from_rgb(225, 219, 208)))
-                .inner_margin(Margin::same(16))
+                .fill(Color32::from_rgb(252, 252, 253))
+                .corner_radius(CornerRadius::same(20))
+                .stroke(Stroke::new(1.0, Color32::from_rgb(226, 228, 233)))
+                .inner_margin(Margin::same(18))
                 .show(ui, |ui| {
                     let rows = self.rules.clone();
                     let rows_is_empty = rows.is_empty();
 
                     ui.horizontal(|ui| {
-                        ui.heading("Rules");
+                        ui.label(
+                            RichText::new("Rules")
+                                .size(22.0)
+                                .strong()
+                                .color(Color32::from_rgb(34, 38, 46)),
+                        );
                         ui.label(
                             RichText::new(format!("{} visible", rows.len()))
-                                .color(Color32::from_rgb(97, 91, 78)),
+                                .color(Color32::from_rgb(108, 114, 126)),
                         );
                     });
-                    ui.add_space(10.0);
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new("Each tunnel keeps its own state, PID and action controls.")
+                            .color(Color32::from_rgb(125, 130, 141)),
+                    );
+                    ui.add_space(14.0);
 
                     egui::ScrollArea::vertical().show(ui, |ui| {
-                        egui::Grid::new("rules-grid")
-                            .num_columns(7)
-                            .min_col_width(70.0)
-                            .spacing([12.0, 12.0])
-                            .show(ui, |ui| {
-                                ui.strong("Rule");
-                                ui.strong("Local");
-                                ui.strong("Remote");
-                                ui.strong("Host");
-                                ui.strong("Status");
-                                ui.strong("PID");
-                                ui.strong("Actions");
-                                ui.end_row();
+                        for (name, rule) in rows {
+                            let is_selected = self.selected.as_deref() == Some(name.as_str());
+                            let pending = self.pending_state(&name);
+                            let (status, fill, text) = match pending {
+                                Some(PendingRuleState::Starting) => (
+                                    "Starting...",
+                                    Color32::from_rgb(233, 241, 255),
+                                    Color32::from_rgb(56, 93, 177),
+                                ),
+                                Some(PendingRuleState::Stopping) => (
+                                    "Stopping...",
+                                    Color32::from_rgb(239, 240, 243),
+                                    Color32::from_rgb(109, 114, 124),
+                                ),
+                                None if rule.status => (
+                                    "Running",
+                                    Color32::from_rgb(231, 246, 237),
+                                    Color32::from_rgb(39, 125, 82),
+                                ),
+                                None => (
+                                    "Stopped",
+                                    Color32::from_rgb(248, 241, 222),
+                                    Color32::from_rgb(151, 106, 28),
+                                ),
+                            };
 
-                                for (name, rule) in rows {
-                                    let is_selected = self.selected.as_deref() == Some(name.as_str());
-                                    let label = if is_selected {
-                                        RichText::new(&name)
-                                            .strong()
-                                            .color(Color32::from_rgb(32, 62, 99))
+                            Frame::new()
+                                .fill(if is_selected {
+                                    Color32::from_rgb(245, 248, 255)
+                                } else {
+                                    Color32::from_rgb(248, 249, 251)
+                                })
+                                .corner_radius(CornerRadius::same(18))
+                                .stroke(Stroke::new(
+                                    1.0,
+                                    if is_selected {
+                                        Color32::from_rgb(185, 205, 255)
                                     } else {
-                                        RichText::new(&name)
-                                    };
-                                    if ui.selectable_label(is_selected, label).clicked() {
-                                        self.load_into_form(&name, &rule);
-                                    }
-                                    ui.label(rule.local_port.to_string());
-                                    ui.label(rule.remote_port.to_string());
-                                    ui.label(rule.remote_host.clone());
-
-                                    let (status, fill, text) = match self.pending_state(&name) {
-                                        Some(PendingRuleState::Starting) => (
-                                            "Starting...",
-                                            Color32::from_rgb(225, 235, 248),
-                                            Color32::from_rgb(48, 92, 150),
-                                        ),
-                                        Some(PendingRuleState::Stopping) => (
-                                            "Stopping...",
-                                            Color32::from_rgb(236, 235, 232),
-                                            Color32::from_rgb(108, 105, 98),
-                                        ),
-                                        None if rule.status => (
-                                            "Running",
-                                            Color32::from_rgb(226, 242, 231),
-                                            Color32::from_rgb(42, 125, 73),
-                                        ),
-                                        None => (
-                                            "Stopped",
-                                            Color32::from_rgb(248, 234, 207),
-                                            Color32::from_rgb(145, 98, 24),
-                                        ),
-                                    };
-                                    Frame::new()
-                                        .fill(fill)
-                                        .corner_radius(CornerRadius::same(255))
-                                        .inner_margin(Margin::symmetric(8, 4))
-                                        .show(ui, |ui| {
-                                            ui.label(RichText::new(status).color(text));
+                                        Color32::from_rgb(229, 231, 236)
+                                    },
+                                ))
+                                .inner_margin(Margin::same(16))
+                                .show(ui, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.vertical(|ui| {
+                                            let label = if is_selected {
+                                                RichText::new(&name)
+                                                    .size(17.0)
+                                                    .strong()
+                                                    .color(Color32::from_rgb(36, 67, 126))
+                                            } else {
+                                                RichText::new(&name)
+                                                    .size(17.0)
+                                                    .strong()
+                                                    .color(Color32::from_rgb(34, 38, 46))
+                                            };
+                                            if ui.selectable_label(is_selected, label).clicked() {
+                                                self.load_into_form(&name, &rule);
+                                            }
+                                            ui.add_space(4.0);
+                                            ui.horizontal_wrapped(|ui| {
+                                                ui.label(
+                                                    RichText::new(format!("Host {}", rule.remote_host))
+                                                        .color(Color32::from_rgb(108, 114, 126)),
+                                                );
+                                                ui.label(
+                                                    RichText::new(format!("Local {}", rule.local_port))
+                                                        .color(Color32::from_rgb(108, 114, 126)),
+                                                );
+                                                ui.label(
+                                                    RichText::new(format!("Remote {}", rule.remote_port))
+                                                        .color(Color32::from_rgb(108, 114, 126)),
+                                                );
+                                                ui.label(
+                                                    RichText::new(format!(
+                                                        "PID {}",
+                                                        rule.pid
+                                                            .map(|pid| pid.to_string())
+                                                            .unwrap_or_else(|| "-".to_string())
+                                                    ))
+                                                    .color(Color32::from_rgb(108, 114, 126)),
+                                                );
+                                            });
                                         });
 
-                                    ui.label(
-                                        rule.pid
-                                            .map(|pid| pid.to_string())
-                                            .unwrap_or_else(|| "-".to_string()),
-                                    );
-
-                                    ui.horizontal(|ui| {
-                                        let pending = self.pending_state(&name);
-                                        let action = match pending {
-                                            Some(PendingRuleState::Starting) => "Starting...",
-                                            Some(PendingRuleState::Stopping) => "Stopping...",
-                                            None if rule.status => "Stop",
-                                            None => "Start",
-                                        };
-                                        let clicked = ui
-                                            .add_enabled(pending.is_none(), egui::Button::new(action))
-                                            .clicked();
-                                        if clicked {
-                                            if rule.status {
-                                                self.request_stop(
-                                                    vec![name.clone()],
-                                                    format!("Rule '{}' stopped", name),
-                                                );
-                                            } else {
-                                                self.request_start(
-                                                    vec![name.clone()],
-                                                    format!("Rule '{}' started", name),
-                                                );
+                                        ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                                            if ui
+                                                .add(
+                                                    Button::new("Delete")
+                                                        .fill(Color32::from_rgb(246, 238, 238))
+                                                        .stroke(Stroke::new(1.0, Color32::from_rgb(235, 212, 212)))
+                                                        .corner_radius(CornerRadius::same(10)),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.delete_rule(&name);
+                                                ctx.request_repaint();
                                             }
-                                            ctx.request_repaint();
-                                        }
+                                            if ui
+                                                .add(
+                                                    Button::new("Edit")
+                                                        .fill(Color32::from_rgb(239, 241, 245))
+                                                        .stroke(Stroke::new(1.0, Color32::from_rgb(221, 224, 230)))
+                                                        .corner_radius(CornerRadius::same(10)),
+                                                )
+                                                .clicked()
+                                            {
+                                                self.load_into_form(&name, &rule);
+                                                ctx.request_repaint();
+                                            }
 
-                                        if ui.button("Edit").clicked() {
-                                            self.load_into_form(&name, &rule);
-                                            ctx.request_repaint();
-                                        }
-                                        if ui.button("Delete").clicked() {
-                                            self.delete_rule(&name);
-                                            ctx.request_repaint();
-                                        }
+                                            let action = match pending {
+                                                Some(PendingRuleState::Starting) => "Starting...",
+                                                Some(PendingRuleState::Stopping) => "Stopping...",
+                                                None if rule.status => "Stop",
+                                                None => "Start",
+                                            };
+                                            let action_button = if rule.status {
+                                                Button::new(action)
+                                                    .fill(Color32::from_rgb(244, 236, 236))
+                                                    .stroke(Stroke::new(1.0, Color32::from_rgb(235, 217, 217)))
+                                                    .corner_radius(CornerRadius::same(10))
+                                            } else {
+                                                Button::new(action)
+                                                    .fill(Color32::from_rgb(55, 96, 208))
+                                                    .stroke(Stroke::NONE)
+                                                    .corner_radius(CornerRadius::same(10))
+                                            };
+                                            let clicked = ui.add_enabled(pending.is_none(), action_button).clicked();
+                                            if clicked {
+                                                if rule.status {
+                                                    self.request_stop(
+                                                        vec![name.clone()],
+                                                        format!("Rule '{}' stopped", name),
+                                                    );
+                                                } else {
+                                                    self.request_start(
+                                                        vec![name.clone()],
+                                                        format!("Rule '{}' started", name),
+                                                    );
+                                                }
+                                                ctx.request_repaint();
+                                            }
+
+                                            Frame::new()
+                                                .fill(fill)
+                                                .corner_radius(CornerRadius::same(255))
+                                                .inner_margin(Margin::symmetric(10, 6))
+                                                .show(ui, |ui| {
+                                                    ui.label(
+                                                        RichText::new(status)
+                                                            .size(12.0)
+                                                            .strong()
+                                                            .color(text),
+                                                    );
+                                                });
+                                        });
                                     });
-                                    ui.end_row();
-                                }
-                            });
+                                });
+                            ui.add_space(10.0);
+                        }
 
                         if rows_is_empty {
                             ui.add_space(20.0);
@@ -569,9 +714,9 @@ impl eframe::App for RspGuiApp {
                                 ui.label(
                                     RichText::new("No matching rules")
                                         .size(18.0)
-                                        .color(Color32::from_rgb(97, 91, 78)),
+                                        .color(Color32::from_rgb(108, 114, 126)),
                                 );
-                                ui.label("Try another keyword or create a new rule.");
+                                ui.label("Create a new rule from the editor on the right.");
                             });
                         }
                     });
@@ -663,21 +808,28 @@ fn spawn_worker(ctx: egui::Context) -> WorkerHandle {
 
 fn configure_theme(ctx: &egui::Context) {
     let mut visuals = egui::Visuals::light();
-    visuals.window_fill = Color32::from_rgb(243, 239, 232);
-    visuals.panel_fill = Color32::from_rgb(243, 239, 232);
-    visuals.faint_bg_color = Color32::from_rgb(235, 229, 219);
-    visuals.extreme_bg_color = Color32::from_rgb(252, 250, 246);
-    visuals.widgets.active.bg_fill = Color32::from_rgb(70, 106, 145);
-    visuals.widgets.hovered.bg_fill = Color32::from_rgb(87, 122, 160);
-    visuals.widgets.inactive.bg_fill = Color32::from_rgb(233, 227, 217);
-    visuals.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(52, 51, 48);
-    visuals.selection.bg_fill = Color32::from_rgb(198, 220, 238);
-    visuals.window_corner_radius = CornerRadius::same(18);
+    visuals.window_fill = Color32::from_rgb(241, 243, 247);
+    visuals.panel_fill = Color32::from_rgb(241, 243, 247);
+    visuals.faint_bg_color = Color32::from_rgb(247, 248, 250);
+    visuals.extreme_bg_color = Color32::from_rgb(255, 255, 255);
+    visuals.widgets.active.bg_fill = Color32::from_rgb(55, 96, 208);
+    visuals.widgets.active.fg_stroke.color = Color32::WHITE;
+    visuals.widgets.hovered.bg_fill = Color32::from_rgb(73, 113, 222);
+    visuals.widgets.hovered.fg_stroke.color = Color32::WHITE;
+    visuals.widgets.inactive.bg_fill = Color32::from_rgb(246, 247, 249);
+    visuals.widgets.inactive.fg_stroke.color = Color32::from_rgb(54, 59, 69);
+    visuals.widgets.noninteractive.bg_fill = Color32::from_rgb(252, 252, 253);
+    visuals.widgets.noninteractive.fg_stroke.color = Color32::from_rgb(54, 59, 69);
+    visuals.selection.bg_fill = Color32::from_rgb(214, 228, 255);
+    visuals.window_corner_radius = CornerRadius::same(20);
     ctx.set_visuals(visuals);
 
     let mut style = (*ctx.style()).clone();
-    style.spacing.item_spacing = Vec2::new(10.0, 10.0);
-    style.spacing.button_padding = Vec2::new(12.0, 8.0);
+    style.spacing.item_spacing = Vec2::new(12.0, 12.0);
+    style.spacing.button_padding = Vec2::new(14.0, 9.0);
     style.spacing.window_margin = Margin::same(14);
+    style.visuals.widgets.inactive.corner_radius = CornerRadius::same(10);
+    style.visuals.widgets.hovered.corner_radius = CornerRadius::same(10);
+    style.visuals.widgets.active.corner_radius = CornerRadius::same(10);
     ctx.set_style(style);
 }

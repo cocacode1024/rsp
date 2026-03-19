@@ -104,6 +104,53 @@ pub fn start_rules(names: &[String]) -> Result<()> {
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Rule '{name}' not found"))?;
 
+        let duplicate_rule_names: Vec<String> = rules
+            .iter()
+            .filter(|(other_name, other_rule)| {
+                other_name.as_str() != name && other_rule.local_port == rule.local_port
+            })
+            .map(|(other_name, _)| other_name.clone())
+            .collect();
+
+        let mut running_duplicate_rules = Vec::new();
+        let mut stale_duplicate_rules = Vec::new();
+        for other_name in duplicate_rule_names {
+            let Some(other_rule) = rules.get(&other_name).cloned() else {
+                continue;
+            };
+
+            let duplicate_pid = resolve_rule_pid(
+                other_rule.pid,
+                other_rule.local_port,
+                other_rule.remote_port,
+                &other_rule.remote_host,
+            )?;
+
+            if duplicate_pid.is_some() {
+                running_duplicate_rules.push(other_name);
+            } else {
+                stale_duplicate_rules.push(other_name);
+            }
+        }
+
+        if !running_duplicate_rules.is_empty() {
+            bail!(
+                "Local port {} is already occupied by running rule(s): {}. Stop that rule first before starting '{}'.",
+                rule.local_port,
+                running_duplicate_rules.join(", "),
+                name
+            );
+        }
+
+        for stale_name in stale_duplicate_rules {
+            if let Some(stale_rule) = rules.get_mut(&stale_name) {
+                if stale_rule.status || stale_rule.pid.is_some() {
+                    stale_rule.status = false;
+                    stale_rule.pid = None;
+                }
+            }
+        }
+
         let existing_pids =
             get_rule_process_pids(rule.local_port, rule.remote_port, &rule.remote_host)
                 .unwrap_or_default();
@@ -229,10 +276,6 @@ fn is_missing_process_error(err: &anyhow::Error) -> bool {
     text.contains("no such process")
 }
 
-pub fn all_rule_names(rules: &[(String, PortForwardRule)]) -> Vec<String> {
-    rules.iter().map(|(name, _)| name.clone()).collect()
-}
-
 pub fn make_rule(
     local_port: u16,
     remote_port: u16,
@@ -258,27 +301,11 @@ fn validate_rule(
     if name.trim().is_empty() {
         bail!("Rule name cannot be empty");
     }
-    if name == "all" {
-        bail!("'all' is a reserved keyword");
-    }
     if current_name != Some(name) && rules.contains_key(name) {
         bail!("Rule '{name}' already exists");
     }
     if rule.remote_host.trim().is_empty() {
         bail!("Remote host cannot be empty");
-    }
-
-    for (existing_name, existing_rule) in rules {
-        if current_name == Some(existing_name.as_str()) {
-            continue;
-        }
-        if existing_rule.local_port == rule.local_port {
-            bail!(
-                "Local port {} is already used by rule '{}'",
-                rule.local_port,
-                existing_name
-            );
-        }
     }
     Ok(())
 }

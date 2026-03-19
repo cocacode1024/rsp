@@ -6,7 +6,10 @@ use crate::cmd::remove::remove_rules;
 use crate::cmd::start::start_forward;
 use crate::cmd::stop::stop_forward;
 use crate::gui;
+use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
+use std::env;
+use std::process::{Command, Stdio};
 
 #[derive(Parser, Debug)]
 #[command(name = "rst")]
@@ -80,6 +83,7 @@ impl Cli {
         let cli = Cli::parse();
         match &cli.command {
             None | Some(Commands::Gui) => {
+                maybe_detach_gui_process()?;
                 gui::run()?;
             }
             Some(Commands::Add) => {
@@ -111,4 +115,37 @@ impl Cli {
         }
         Ok(())
     }
+}
+
+#[cfg(target_os = "macos")]
+fn maybe_detach_gui_process() -> anyhow::Result<()> {
+    const GUI_CHILD_ENV: &str = "RSP_GUI_CHILD";
+
+    if env::var_os(GUI_CHILD_ENV).is_some() {
+        return Ok(());
+    }
+
+    let current_exe = env::current_exe().context("Failed to locate current executable")?;
+    let args: Vec<String> = env::args().skip(1).collect();
+    let child_args = if args.is_empty() {
+        vec!["gui".to_string()]
+    } else {
+        args
+    };
+
+    Command::new(current_exe)
+        .args(&child_args)
+        .env(GUI_CHILD_ENV, "1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .context("Failed to relaunch GUI in background")?;
+
+    std::process::exit(0);
+}
+
+#[cfg(not(target_os = "macos"))]
+fn maybe_detach_gui_process() -> anyhow::Result<()> {
+    Ok(())
 }
