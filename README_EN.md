@@ -8,7 +8,7 @@ RSP is an SSH port forwarding management tool written in Rust. It provides both 
 - Interactive command-line interface
 - Desktop GUI
 - CRUD operations for rules
-- Start/stop single or multiple rules
+- Start/stop individual rules
 - Automatic rule status checking
 - Status refresh based on actual listener state
 
@@ -40,23 +40,19 @@ rsp ls
 
 # Start rules
 rsp start [rule_name]     # Start specific rule
-rsp start all            # Start all rules
 
 # Stop rules
 rsp stop [rule_name]      # Stop specific rule
-rsp stop all             # Stop all rules
 
 # Remove rules
 rsp remove [rule_name]    # Remove specific rule
 rsp rm [rule_name]       # Short command for removing specific rule
-rsp remove all           # Remove all rules
 
 # Edit rule
 rsp edit [rule_name]      # Edit specific rule
 
 # Check rule status
 rsp check [rule_name]     # Check specific rule status
-rsp check all            # Check all rules status
 ```
 
 ### GUI
@@ -77,7 +73,6 @@ Current GUI capabilities:
 - View the rule list
 - Create, edit, and delete rules
 - Start and stop individual rules
-- Start and stop all rules
 - View live rule status and PID
 
 Status meanings:

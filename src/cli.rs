@@ -47,13 +47,13 @@ enum Commands {
     List,
     #[command(
         name = "start",
-        about = "Start one or all portforward",
+        about = "Start one or more port forward rules",
         disable_help_flag = false
     )]
     Start(Rulenames),
     #[command(
         name = "stop",
-        about = "Stop one or all portforward",
+        about = "Stop one or more port forward rules",
         disable_help_flag = false
     )]
     Stop(Rulenames),
@@ -69,7 +69,7 @@ enum Commands {
 
 #[derive(Debug, Args)]
 pub struct Rulenames {
-    #[arg(help = "Rule names to operate on. Use 'all' to operate on all rules")]
+    #[arg(help = "Rule names to operate on")]
     pub names: Vec<String>,
 }
 
@@ -145,7 +145,3 @@ fn maybe_detach_gui_process() -> anyhow::Result<()> {
     std::process::exit(0);
 }
 
-#[cfg(not(target_os = "macos"))]
-fn maybe_detach_gui_process() -> anyhow::Result<()> {
-    Ok(())
-}
