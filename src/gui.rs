@@ -630,7 +630,7 @@ impl eframe::App for RspGuiApp {
                                 } else {
                                     card_fill(self.theme_mode)
                                 })
-                                .corner_radius(CornerRadius::same(24))
+                                .corner_radius(CornerRadius::same(20))
                                 .stroke(Stroke::new(
                                     1.0,
                                     if is_selected {
@@ -639,19 +639,20 @@ impl eframe::App for RspGuiApp {
                                         border_color(self.theme_mode)
                                     },
                                 ))
-                                .inner_margin(Margin::symmetric(18, 16))
+                                .inner_margin(Margin::symmetric(14, 12))
                                 .show(ui, |ui| {
                                     ui.vertical(|ui| {
                                         ui.horizontal(|ui| {
                                             ui.vertical(|ui| {
                                                 let title = RichText::new(&name)
-                                                    .size(20.0)
+                                                    .size(18.0)
                                                     .strong()
                                                     .color(primary_text(self.theme_mode));
                                                 let title_button = Button::new(title)
                                                     .fill(Color32::TRANSPARENT)
                                                     .stroke(Stroke::NONE)
-                                                    .corner_radius(CornerRadius::same(0));
+                                                    .corner_radius(CornerRadius::same(0))
+                                                    .min_size(Vec2::ZERO);
                                                 if ui.add(title_button).clicked() {
                                                     self.load_into_form(&name, &rule);
                                                 }
@@ -662,83 +663,92 @@ impl eframe::App for RspGuiApp {
                                             });
                                         });
 
-                                        ui.add_space(8.0);
-                                        Frame::new()
-                                            .fill(list_item_fill(self.theme_mode))
-                                            .corner_radius(CornerRadius::same(14))
-                                            .inner_margin(Margin::symmetric(12, 6))
-                                            .show(ui, |ui| {
-                                                ui.horizontal_wrapped(|ui| {
-                                                    meta_label(ui, self.theme_mode, "Local", &rule.local_port.to_string());
-                                                    meta_label(ui, self.theme_mode, "Remote", &rule.remote_port.to_string());
-                                                    meta_label(ui, self.theme_mode, "PID", &rule.pid.map(|pid| pid.to_string()).unwrap_or_else(|| "-".to_string()));
-                                                });
-                                            });
-
-                                        ui.add_space(10.0);
-                                        ui.horizontal_wrapped(|ui| {
-                                            let action = match pending {
-                                                Some(PendingRuleState::Starting) => "Starting...",
-                                                Some(PendingRuleState::Stopping) => "Stopping...",
-                                                None if rule.status => "Stop",
-                                                None => "Start",
-                                            };
-                                            let action_button = if rule.status {
-                                                Button::new(RichText::new(action).color(button_text(self.theme_mode, false)))
-                                                    .fill(danger_button_fill(self.theme_mode))
-                                                    .stroke(Stroke::new(1.0, danger_button_stroke(self.theme_mode)))
-                                                    .corner_radius(CornerRadius::same(18))
-                                                    .min_size(egui::vec2(88.0, 34.0))
-                                            } else {
-                                                Button::new(RichText::new(action).color(button_text(self.theme_mode, true)))
-                                                    .fill(primary_button_fill(self.theme_mode))
-                                                    .stroke(Stroke::NONE)
-                                                    .corner_radius(CornerRadius::same(18))
-                                                    .min_size(egui::vec2(88.0, 34.0))
-                                            };
-                                            let clicked = ui.add_enabled(pending.is_none(), action_button).clicked();
-                                            if clicked {
-                                                if rule.status {
-                                                    self.request_stop(
-                                                        vec![name.clone()],
-                                                        format!("Rule '{}' stopped", name),
-                                                    );
-                                                } else {
-                                                    self.request_start(
-                                                        vec![name.clone()],
-                                                        format!("Rule '{}' started", name),
-                                                    );
+                                        ui.add_space(6.0);
+                                        ui.horizontal(|ui| {
+                                            let total_width = ui.available_width();
+                                            let button_group_width = 238.0;
+                                            let meta_width = (total_width - button_group_width - 8.0).max(150.0);
+                                            ui.allocate_ui_with_layout(
+                                                egui::vec2(meta_width, 0.0),
+                                                egui::Layout::left_to_right(Align::Center),
+                                                |ui| {
+                                                    Frame::new()
+                                                        .fill(list_item_fill(self.theme_mode))
+                                                        .corner_radius(CornerRadius::same(12))
+                                                        .inner_margin(Margin::symmetric(10, 4))
+                                                        .show(ui, |ui| {
+                                                            ui.horizontal_wrapped(|ui| {
+                                                                meta_label(ui, self.theme_mode, "Local", &rule.local_port.to_string());
+                                                                meta_label(ui, self.theme_mode, "Remote", &rule.remote_port.to_string());
+                                                                meta_label(ui, self.theme_mode, "PID", &rule.pid.map(|pid| pid.to_string()).unwrap_or_else(|| "-".to_string()));
+                                                            });
+                                                        });
+                                                },
+                                            );
+                                            ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                                                if ui
+                                                    .add(
+                                                        Button::new(RichText::new("Delete").color(button_text(self.theme_mode, false)))
+                                                            .fill(danger_button_fill(self.theme_mode))
+                                                            .stroke(Stroke::new(1.0, danger_button_stroke(self.theme_mode)))
+                                                            .corner_radius(CornerRadius::same(16))
+                                                            .min_size(egui::vec2(70.0, 30.0)),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.delete_rule(&name);
+                                                    ctx.request_repaint();
                                                 }
-                                                ctx.request_repaint();
-                                            }
 
-                                            if ui
-                                                .add(
-                                                    Button::new(RichText::new("Edit").color(button_text(self.theme_mode, false)))
-                                                        .fill(secondary_button_fill(self.theme_mode))
-                                                        .stroke(Stroke::new(1.0, button_stroke(self.theme_mode)))
-                                                        .corner_radius(CornerRadius::same(18))
-                                                        .min_size(egui::vec2(72.0, 34.0)),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.load_into_form(&name, &rule);
-                                                ctx.request_repaint();
-                                            }
+                                                if ui
+                                                    .add(
+                                                        Button::new(RichText::new("Edit").color(button_text(self.theme_mode, false)))
+                                                            .fill(secondary_button_fill(self.theme_mode))
+                                                            .stroke(Stroke::new(1.0, button_stroke(self.theme_mode)))
+                                                            .corner_radius(CornerRadius::same(16))
+                                                            .min_size(egui::vec2(66.0, 30.0)),
+                                                    )
+                                                    .clicked()
+                                                {
+                                                    self.load_into_form(&name, &rule);
+                                                    ctx.request_repaint();
+                                                }
 
-                                            if ui
-                                                .add(
-                                                    Button::new(RichText::new("Delete").color(button_text(self.theme_mode, false)))
+                                                let action = match pending {
+                                                    Some(PendingRuleState::Starting) => "Starting...",
+                                                    Some(PendingRuleState::Stopping) => "Stopping...",
+                                                    None if rule.status => "Stop",
+                                                    None => "Start",
+                                                };
+                                                let action_button = if rule.status {
+                                                    Button::new(RichText::new(action).color(button_text(self.theme_mode, false)))
                                                         .fill(danger_button_fill(self.theme_mode))
                                                         .stroke(Stroke::new(1.0, danger_button_stroke(self.theme_mode)))
-                                                        .corner_radius(CornerRadius::same(18))
-                                                        .min_size(egui::vec2(76.0, 34.0)),
-                                                )
-                                                .clicked()
-                                            {
-                                                self.delete_rule(&name);
-                                                ctx.request_repaint();
-                                            }
+                                                        .corner_radius(CornerRadius::same(16))
+                                                        .min_size(egui::vec2(82.0, 30.0))
+                                                } else {
+                                                    Button::new(RichText::new(action).color(button_text(self.theme_mode, true)))
+                                                        .fill(primary_button_fill(self.theme_mode))
+                                                        .stroke(Stroke::NONE)
+                                                        .corner_radius(CornerRadius::same(16))
+                                                        .min_size(egui::vec2(82.0, 30.0))
+                                                };
+                                                let clicked = ui.add_enabled(pending.is_none(), action_button).clicked();
+                                                if clicked {
+                                                    if rule.status {
+                                                        self.request_stop(
+                                                            vec![name.clone()],
+                                                            format!("Rule '{}' stopped", name),
+                                                        );
+                                                    } else {
+                                                        self.request_start(
+                                                            vec![name.clone()],
+                                                            format!("Rule '{}' started", name),
+                                                        );
+                                                    }
+                                                    ctx.request_repaint();
+                                                }
+                                            });
                                         });
                                     });
                                 });
@@ -746,7 +756,7 @@ impl eframe::App for RspGuiApp {
                                 ui.scroll_to_rect(card_response.response.rect, Some(Align::TOP));
                                 self.scroll_to_rule = None;
                             }
-                            ui.add_space(10.0);
+                            ui.add_space(8.0);
                         }
 
                         if rows_is_empty {
@@ -905,11 +915,11 @@ fn badge(ui: &mut egui::Ui, label: &str, fill: Color32, text: Color32) {
     Frame::new()
         .fill(fill)
         .corner_radius(CornerRadius::same(255))
-        .inner_margin(Margin::symmetric(10, 6))
+        .inner_margin(Margin::symmetric(8, 4))
         .show(ui, |ui| {
             ui.label(
                 RichText::new(label)
-                    .size(12.0)
+                    .size(11.0)
                     .strong()
                     .color(text),
             );
@@ -919,7 +929,7 @@ fn badge(ui: &mut egui::Ui, label: &str, fill: Color32, text: Color32) {
 fn meta_label(ui: &mut egui::Ui, theme_mode: ThemeMode, key: &str, value: &str) {
     ui.label(
         RichText::new(format!("{key} {value}"))
-            .size(12.0)
+            .size(11.0)
             .color(secondary_text(theme_mode)),
     );
 }
