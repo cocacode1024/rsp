@@ -44,7 +44,7 @@ pub fn load_ssh_config() -> Result<Vec<String>> {
     let mut hosts = vec![];
     for line in data.lines() {
         if line.starts_with("Host ") {
-            let host = line.trim_start_matches("Host ").to_string();
+            let host = line.trim_start_matches("Host ").to_owned();
             hosts.push(host);
         }
     }

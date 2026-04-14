@@ -28,7 +28,7 @@ pub fn list_rules() -> Result<()> {
             rule.remote_port,
             rule.remote_host,
             if rule.status { "Running" } else { "Stopped" },
-            rule.pid.map_or("".to_string(), |pid| pid.to_string())
+            rule.pid.map(|pid| pid.to_string()).unwrap_or_default()
         ]);
     }
     table.printstd();

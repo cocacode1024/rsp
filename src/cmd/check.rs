@@ -121,8 +121,8 @@ async fn check_input(
     let mut found_rules = vec![];
     for name in &names {
         match rules.get(name) {
-            Some(_) => found_rules.push(name.to_string()),
-            None => not_found_rules.push(name.to_string()),
+            Some(_) => found_rules.push(name.clone()),
+            None => not_found_rules.push(name.clone()),
         }
     }
     if !not_found_rules.is_empty() {
